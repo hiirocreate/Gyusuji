@@ -3,16 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="screen-orientation" content="landscape" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#000000" />
     <title>BEEF HUNTER</title>
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
+    <div id="safe"></div>
     <div id="stage">
       <div id="game"></div>
-      <div id="ui"></div>
+      <div id="screen"></div>
+      <div id="fieldui"></div>
+      <div id="stream"></div>
+      <div id="chatbar"></div>
+      <div id="overlay"></div>
     </div>
-    <div id="rotate">端末を横向きにしてください</div>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

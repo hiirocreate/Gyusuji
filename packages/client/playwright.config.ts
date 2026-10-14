@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'http://localhost:4173',
-    viewport: { width: 854, height: 480 },
+    viewport: { width: 640, height: 324 },
     launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
   },
   webServer: [

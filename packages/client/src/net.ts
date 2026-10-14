@@ -1,5 +1,6 @@
 import { Client, type Room } from 'colyseus.js';
-import { cpuDecide, Rand, Runner } from '@gyusuji/shared';
+import { CHAT_COLORS, PROTOCOL_VERSION, cpuDecide, Rand, Runner } from '@gyusuji/shared';
+import { platform } from './layout.js';
 import type { Ask, GameEvent, Input, PublicView, SeatInit, Settings } from '@gyusuji/shared';
 import { store, update } from './store.js';
 
@@ -47,7 +48,7 @@ export abstract class Host {
   /** 演出キューが空になった時に呼ばれる */
   idle(): void {}
   sendChat(text: string, color: number): void {
-    this.chat.emit({ from: store().name, text, color: ['#ffffff', '#ff8080', '#80c0ff', '#ffe060'][color] });
+    this.chat.emit({ from: store().name, text, color: CHAT_COLORS[color] });
   }
   sendStamp(id: number): void {
     const seat = [...this.mySeats][0] ?? -1;
@@ -166,11 +167,22 @@ export class Net {
   }
 
   private opts(extra: Record<string, unknown> = {}) {
-    return { name: store().name, friendCode: store().friendCode, ...extra };
+    return { name: store().name, friendCode: store().friendCode, protocol: PROTOCOL_VERSION, platform: platform(), ...extra };
   }
 
   async create(isPublic: boolean): Promise<void> {
     this.attach(await this.cl().create('game', this.opts({ public: isPublic })));
+  }
+
+  /** 部屋選択（8部屋）。部屋が無ければ作る */
+  async joinSlot(slot: number): Promise<void> {
+    this.attach(await this.cl().joinOrCreate('game', this.opts({ slot })));
+  }
+
+  async slots(): Promise<{ slot: number; players: number; phase: string; roomId: string | null }[]> {
+    const r = await fetch(`${httpBase()}/slots`);
+    if (!r.ok) throw new Error('サーバに接続できません');
+    return r.json();
   }
 
   async random(): Promise<void> {
@@ -302,6 +314,11 @@ export class Net {
 }
 
 export const net = new Net();
+
+// アプリが裏に回って切断された場合、復帰時に自動再接続（60秒以内なら同じ席）
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !net.room && sessionStorage.getItem('bh.lastSeat')) void net.resume();
+});
 
 export class OnlineHost extends Host {
   kind = 'online' as const;

@@ -1,34 +1,33 @@
 import Phaser from 'phaser';
 import { unlockAudio } from './audio.js';
-import { fitStage } from './ui.js';
+import { say } from './chat.js';
+import { layout, onLayout, watchLayout } from './layout.js';
 import { Boot } from './scenes/Boot.js';
-import { Title } from './scenes/Title.js';
-import { Lobby } from './scenes/Lobby.js';
-import { Room } from './scenes/Room.js';
+import { Menu } from './scenes/Menu.js';
 import { Field } from './scenes/Field.js';
 import { Battle } from './scenes/Battle.js';
-import { Hud } from './scenes/Hud.js';
-import { Result } from './scenes/Result.js';
+import { Overlay } from './scenes/Overlay.js';
+import { Status } from './scenes/Status.js';
 
-fitStage();
-window.addEventListener('resize', fitStage);
+watchLayout();
 unlockAudio();
-
-// 横画面固定（Capacitor / 対応ブラウザ）
-const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
-orientation?.lock?.('landscape').catch(() => {});
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: 854,
-  height: 480,
+  width: layout().w,
+  height: layout().h,
   backgroundColor: '#000000',
-  pixelArt: false,
+  roundPixels: true,
   scale: { mode: Phaser.Scale.NONE },
-  input: { activePointers: 3 },
-  scene: [Boot, Title, Lobby, Room, Field, Battle, Hud, Result],
+  input: { activePointers: 2 },
+  scene: [Boot, Menu, Field, Battle, Overlay, Status],
 });
 
-// デバッグ・E2E 用
+// 向きが変わってもゲーム・通信は止めずにレイアウトだけ切り替える
+onLayout((l) => game.scale.resize(l.w, l.h));
+
 (window as unknown as { game: Phaser.Game }).game = game;
+
+// E2E・確認用：任意の送信者のメッセージを流す
+(window as unknown as { __say: (from: string, text: string, color: string) => void }).__say = (from, text, color) => say({ from, text, color, system: false });

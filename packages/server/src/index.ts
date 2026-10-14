@@ -3,6 +3,7 @@ import { Server, matchMaker } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { GameRoom } from './GameRoom.js';
 import { friendRooms } from './registry.js';
+import { ROOM_SLOTS } from '@gyusuji/shared';
 
 const port = Number(process.env.PORT ?? 2567);
 
@@ -26,6 +27,14 @@ const httpServer = http.createServer(async (req, res) => {
     const id = friendRooms.get(url.searchParams.get('code') ?? '');
     return id ? json(200, { roomId: id }) : json(404, { error: 'offline' });
   }
+  // 部屋選択（8部屋）
+  if (url.pathname === '/slots') {
+    const rooms = await matchMaker.query({ name: 'game' });
+    return json(200, Array.from({ length: ROOM_SLOTS }, (_, i) => {
+      const r = rooms.find((x) => x.metadata?.slot === i + 1);
+      return { slot: i + 1, players: r?.metadata?.players ?? 0, phase: r?.metadata?.phase ?? 'empty', roomId: r?.roomId ?? null };
+    }));
+  }
   // 観戦可能なルーム一覧
   if (url.pathname === '/rooms') {
     const rooms = await matchMaker.query({ name: 'game' });
@@ -36,5 +45,5 @@ const httpServer = http.createServer(async (req, res) => {
 });
 
 const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });
-gameServer.define('game', GameRoom).filterBy(['public']);
+gameServer.define('game', GameRoom).filterBy(['public', 'slot']);
 gameServer.listen(port).then(() => console.log(`BEEF HUNTER server listening on :${port}`));

@@ -1,27 +1,25 @@
 import Phaser from 'phaser';
-import { C, CHARS, CHAT_COLORS, ENEMIES, GameMap, ITEMS, MAPS, STAMPS } from '@gyusuji/shared';
+import { C, ENEMIES, GameMap, ITEMS, MAPS } from '@gyusuji/shared';
 import type { Ask, GameEvent, PublicPlayer, PublicView } from '@gyusuji/shared';
 import { Tracker, unlock } from '../achievements.js';
 import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, classicTile, iconStyle, v2Tile } from '../assets.js';
 import { bgm, se } from '../audio.js';
-import type { Host, OnlineHost } from '../net.js';
-import { store, update } from '../store.js';
-import { clearUI, h, longPress, modal, mount, toast } from '../ui.js';
+import { buildChatBar, closeLog, say, setSender, system } from '../chat.js';
+import { onLayout } from '../layout.js';
+import { net, type Host, type OnlineHost } from '../net.js';
+import { update } from '../store.js';
+import { $, centerWin, fieldUI, h, menuWin, type MenuItem } from '../ui.js';
 import type { Battle } from './Battle.js';
-import type { Hud } from './Hud.js';
+import type { Overlay } from './Overlay.js';
+import type { Status } from './Status.js';
+import { fieldCam, frames, tween, wait } from './fieldcam.js';
 
 const T = C.TILE;
+/** キャラの描画位置はマス中心から上へ10px（SQU_CHR_OFFS_Y） */
+const CHR_OFFS_Y = -10;
+const HERO_SCALE = 0.75;
 type Batch = { events: GameEvent[]; view: PublicView };
-
-const TUTORIAL: Record<string, string> = {
-  action: '「さいころ」で進みます。アイテムを使うとそのターンは終了です。',
-  battle: '戦闘です。「たたかう」でダイスを振って攻撃！ 逃げることはできません。',
-  shop: '商人からはアイテムを1つ買えます。品揃えは店ごとに違います。',
-  treasure: '宝箱は運が低いと爆発しやすいので注意！',
-  branch: '分かれ道です。楽な道と険しい道を選べます。',
-  inn: '宿屋ではHPとMPが全回復します。',
-  qbox: '?ボックスでは妨害アイテムがもらえます。',
-};
+const ARROWS = ['up', 'down', 'left', 'right'];
 
 export class Field extends Phaser.Scene {
   private host!: Host;
@@ -29,19 +27,21 @@ export class Field extends Phaser.Scene {
   private view!: PublicView;
   private objSprites: (Phaser.GameObjects.Sprite | null)[] = [];
   private heroes: Phaser.GameObjects.Sprite[] = [];
+  private shadows: Phaser.GameObjects.Ellipse[] = [];
   private marks: Phaser.GameObjects.Sprite[][] = [];
   private cursor!: Phaser.GameObjects.Sprite;
   private queue: Batch[] = [];
   private busy = false;
   private battle!: Battle;
-  private hud!: Hud;
+  private overlay!: Overlay;
+  private status!: Status;
   private tracker!: Tracker;
-  private ui!: { status: HTMLElement; log: HTMLElement; dialog: HTMLElement; timer: HTMLElement; chat: HTMLElement };
-  private logLines: string[] = [];
-  private shownAsk: Ask | null = null;
+  private shownAsk = '';
+  private streamedAsk = '';
   private offs: (() => void)[] = [];
-  private hinted = new Set<string>();
-  private following: number = -1;
+  private actor = 0;
+  private hpWin: HTMLElement | null = null;
+  private timerWin: HTMLElement | null = null;
 
   constructor() {
     super('Field');
@@ -51,9 +51,8 @@ export class Field extends Phaser.Scene {
     this.host = data.host;
     this.queue = [];
     this.busy = false;
-    this.shownAsk = null;
-    this.logLines = [];
-    this.hinted.clear();
+    this.shownAsk = '';
+    this.streamedAsk = '';
   }
 
   create() {
@@ -61,38 +60,47 @@ export class Field extends Phaser.Scene {
     this.view = host.view!;
     this.map = new GameMap(MAPS[host.settings.map]);
     this.tracker = new Tracker(host.mySeats);
-    this.cameras.main.setViewport(0, 0, 640, 480).setBackgroundColor('#1b4fa0');
-    this.cameras.main.setBounds(-80, -80, this.map.data.width * T + 160, this.map.data.height * T + 160);
+    fieldCam(this, true);
+    this.cameras.main.setBackgroundColor('#000000');
     this.drawMap();
     this.drawObjects();
     this.drawHeroes();
-    this.setupInput();
-    this.buildUI();
 
     this.scene.launch('Battle');
-    this.scene.launch('Hud');
+    this.scene.launch('Overlay');
+    this.scene.launch('Status');
     this.battle = this.scene.get('Battle') as Battle;
-    this.hud = this.scene.get('Hud') as Hud;
+    this.overlay = this.scene.get('Overlay') as Overlay;
+    this.status = this.scene.get('Status') as Status;
     this.scene.bringToTop('Battle');
-    this.scene.bringToTop('Hud');
+    this.scene.bringToTop('Overlay');
+
+    buildChatBar();
+    $('chatbar').style.display = 'flex';
+    setSender(host.kind === 'online' ? (t, c) => host.sendChat(t, c) : null);
 
     this.offs = [
       host.batch.on((b) => { this.queue.push(b); void this.pump(); }),
       host.askChanged.on(() => this.refreshAsk(true)),
-      host.chat.on((m) => this.addChat(m.system ? `※ ${m.text}` : `${m.from}：${m.text}`, m.color)),
-      host.stamp.on((m) => this.showStamp(m.seat, m.id, m.from)),
+      host.kind === 'online' ? host.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })) : () => {},
+      onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); })),
     ];
     this.events.once('shutdown', () => {
       this.offs.forEach((f) => f());
+      fieldUI().replaceChildren();
+      closeLog();
       this.scene.stop('Battle');
-      this.scene.stop('Hud');
+      this.scene.stop('Overlay');
+      this.scene.stop('Status');
     });
     this.time.addEvent({ delay: 250, loop: true, callback: () => this.tickTimer() });
     bgm('field');
-    this.applyView(this.view);
-    this.focus(this.view.turn, true);
-    if ('start' in host) (host as unknown as { start(): void }).start();
-    this.refreshAsk();
+    this.time.delayedCall(0, () => {
+      this.applyView(this.view);
+      this.lookAt(this.view.turn);
+      if ('start' in host) (host as unknown as { start(): void }).start();
+      this.refreshAsk(true);
+    });
   }
 
   // ───────── 描画 ─────────
@@ -102,35 +110,38 @@ export class Field extends Phaser.Scene {
     const v2 = d.terrainSet === 'v2';
     const blits: Record<string, Phaser.GameObjects.Blitter> = {};
     const blit = (tex: string, x: number, y: number) => {
-      blits[tex] ??= this.add.blitter(0, 0, tex);
-      blits[tex].create(x * T, y * T);
+      blits[tex] ??= this.add.blitter(0, 0, `${tex}+`).setDepth(-2);
+      blits[tex].create(x * T - 1, y * T - 1);
     };
-    const seaCells: [number, number][] = [];
-    for (let y = 0; y < d.height; y++) {
-      for (let x = 0; x < d.width; x++) {
-        const t = d.terrain[y * d.width + x];
-        const tex = v2 ? v2Tile(t) : classicTile(t);
-        if (tex === 'sea') seaCells.push([x, y]);
-        else blit(tex, x, y);
+    // タイルは縁を1px延長した版を1pxずらして重ねる（拡大時の隙間対策）
+    const sea0 = this.add.blitter(-1, -1, 'tiles/sea_0+').setDepth(-3);
+    const sea1 = this.add.blitter(-1, -1, 'tiles/sea_1+').setDepth(-3).setVisible(false);
+    // 画面外も海で埋める
+    for (let y = -6; y < d.height + 6; y++) {
+      for (let x = -6; x < d.width + 6; x++) {
+        const inside = x >= 0 && y >= 0 && x < d.width && y < d.height;
+        const t = inside ? d.terrain[y * d.width + x] : -1;
+        const tex = !inside ? 'sea' : v2 ? v2Tile(t) : classicTile(t);
+        if (tex === 'sea') {
+          sea0.create(x * T, y * T);
+          sea1.create(x * T, y * T);
+        } else blit(tex, x, y);
       }
     }
-    const sea0 = this.add.blitter(0, 0, 'tiles/sea_0');
-    const sea1 = this.add.blitter(0, 0, 'tiles/sea_1').setVisible(false);
-    for (const [x, y] of seaCells) {
-      sea0.create(x * T, y * T);
-      sea1.create(x * T, y * T);
-    }
-    sea0.setDepth(-2);
-    sea1.setDepth(-2);
     this.time.addEvent({ delay: 700, loop: true, callback: () => { sea0.setVisible(!sea0.visible); sea1.setVisible(!sea1.visible); } });
     for (const p of d.path) {
       const t = d.terrain[p.y * d.width + p.x];
       const onSea = v2 ? t === 0 : t === 3;
       const tex = p.c === 'start' ? 'tiles/path_start' : p.c === 'branch' ? 'tiles/path_branch' : p.c === 'lastboss' ? 'tiles/path_lastboss'
         : /^boss/.test(p.c) ? 'tiles/path_boss' : onSea ? 'tiles/bridge' : 'tiles/path';
-      blit(tex, p.x, p.y);
+      blits[`p:${tex}`] ??= this.add.blitter(0, 0, `${tex}+`).setDepth(-1);
+      blits[`p:${tex}`].create(p.x * T - 1, p.y * T - 1);
     }
-    Object.values(blits).forEach((b) => b.setDepth(b.texture.key.includes('path') || b.texture.key.includes('bridge') ? -1 : -1.5));
+  }
+
+  /** y の小さい順に描く（下の物ほど手前） */
+  private depthOf(y: number, extra = 0) {
+    return y * 10 + extra;
   }
 
   private drawObjects() {
@@ -138,35 +149,43 @@ export class Field extends Phaser.Scene {
       const cx = o.x * T + T / 2;
       const cy = o.y * T + T / 2;
       let s: Phaser.GameObjects.Sprite | null = null;
-      if (NPC_OF[o.type]) s = this.add.sprite(cx, cy + 6, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(0.8).setOrigin(0.5, 0.75);
+      if (NPC_OF[o.type]) s = this.add.sprite(cx, cy + CHR_OFFS_Y, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(HERO_SCALE);
       else if (OBJ_OF[o.type]) s = this.add.sprite(cx, cy, OBJ_OF[o.type]).setScale(0.8);
       else if (ENEMIES[o.type]) {
         const e = ENEMIES[o.type];
-        s = this.add.sprite(cx, cy + 6, e.sprite).setOrigin(0.5, 0.75).setScale(e.boss ? 1.2 : 0.8).play(`${e.sprite}_idle`);
+        s = this.add.sprite(cx, cy + CHR_OFFS_Y, e.sprite).setScale(e.boss ? 1 : HERO_SCALE).play(`${e.sprite}_idle`);
         if (o.type === 'lastboss_king') s.setTint(0xff9090);
       }
-      s?.setDepth(o.y);
+      s?.setDepth(this.depthOf(o.y, 2));
       return s;
     });
   }
 
   private drawHeroes() {
-    this.heroes = this.view.players.map((p) => this.add.sprite(0, 0, HEROES[p.charId], DIR_ROW[p.dir] * 4).setOrigin(0.5, 0.8).setScale(0.85));
+    this.heroes = this.view.players.map((p) => this.add.sprite(0, 0, HEROES[p.charId], DIR_ROW[p.dir] * 4).setScale(HERO_SCALE));
+    this.shadows = this.view.players.map(() => this.add.ellipse(0, 0, 22, 7, 0x000000, 0.35));
     this.marks = this.view.players.map(() => []);
-    this.cursor = this.add.sprite(0, 0, 'fx/cursor').play('fx/cursor').setDepth(1000).setScale(0.8);
-    this.view.players.forEach((p) => this.placeHero(p.seat, p.x, p.y, this.view.players));
+    this.cursor = this.add.sprite(0, 0, 'fx/cursor').play('fx/cursor').setDepth(100000).setScale(0.6);
+    this.view.players.forEach((p) => this.placeHero(p.seat, p.x, p.y));
   }
 
-  private heroPos(seat: number, x: number, y: number, players: PublicPlayer[]) {
-    const same = players.filter((q) => q.x === x && q.y === y).map((q) => q.seat);
-    const k = same.indexOf(seat);
-    const off = same.length > 1 ? (k - (same.length - 1) / 2) * 10 : 0;
-    return { px: x * T + T / 2 + off, py: y * T + T / 2 + 8 + (k % 2) * 3 };
+  private placeHero(seat: number, x: number, y: number) {
+    const px = x * T + T / 2;
+    const py = y * T + T / 2;
+    this.heroes[seat].setPosition(px, py + CHR_OFFS_Y);
+    this.shadows[seat].setPosition(px, py + 8);
+    this.restack();
   }
 
-  private placeHero(seat: number, x: number, y: number, players: PublicPlayer[]) {
-    const { px, py } = this.heroPos(seat, x, y, players);
-    this.heroes[seat].setPosition(px, py).setDepth(y + 0.5);
+  /** 手番キャラは同じマスでも一番手前 */
+  private restack() {
+    this.heroes.forEach((s, i) => {
+      const cy = Math.floor((s.y - CHR_OFFS_Y) / T);
+      s.setDepth(this.depthOf(cy, i === this.view.turn ? 6 : 4));
+      this.shadows[i].setDepth(this.depthOf(cy, 1)).setPosition(s.x, s.y - CHR_OFFS_Y + 8);
+    });
+    const cur = this.heroes[this.view.turn];
+    if (cur) this.cursor.setPosition(cur.x, cur.y - 30);
   }
 
   private faceHero(seat: number, dir: string, walk: boolean) {
@@ -179,244 +198,132 @@ export class Field extends Phaser.Scene {
     }
   }
 
-  private setupInput() {
-    const cam = this.cameras.main;
-    let dragging = false;
-    let pinch = 0;
-    this.input.addPointer(1);
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      const p1 = this.input.pointer1;
-      const p2 = this.input.pointer2;
-      if (p1.isDown && p2.isDown) {
-        const d = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
-        if (pinch) cam.setZoom(Phaser.Math.Clamp(cam.zoom * (d / pinch), 0.4, 2));
-        pinch = d;
-        return;
-      }
-      pinch = 0;
-      if (!p.isDown || p.x > 640) return;
-      const dx = p.x - p.prevPosition.x;
-      const dy = p.y - p.prevPosition.y;
-      if (!dragging && Math.abs(dx) + Math.abs(dy) < 3) return;
-      dragging = true;
-      cam.stopFollow();
-      this.following = -1;
-      cam.scrollX -= dx / cam.zoom;
-      cam.scrollY -= dy / cam.zoom;
-    });
-    this.input.on('pointerup', () => { dragging = false; pinch = 0; });
-    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.1), 0.4, 2)));
-  }
-
-  private focus(seat: number, instant = false) {
+  /** カメラは手番（イベント対象）キャラを中心に。対象が変わると画面を切り替える */
+  private lookAt(seat: number) {
     const s = this.heroes[seat];
     if (!s) return;
-    this.following = seat;
+    this.actor = seat;
     const cam = this.cameras.main;
-    if (instant) cam.centerOn(s.x, s.y);
-    cam.startFollow(s, true, 0.12, 0.12);
+    cam.stopFollow();
+    cam.startFollow(s, true, 1, 1, 0, -CHR_OFFS_Y);
   }
 
-  // ───────── UI ─────────
-
-  private buildUI() {
-    clearUI();
-    const status = mount(h('div', { id: 'status' }));
-    const log = mount(h('div', { class: 'log' }));
-    const timer = mount(h('div', { class: 'timer' }));
-    const dialog = mount(h('div', { class: 'pass' }));
-    const chat = mount(h('div', { class: 'pass' }));
-    this.ui = { status, log, dialog, timer, chat };
-    const bar = mount(h('div', { style: 'position:absolute;left:6px;bottom:6px', class: 'row' },
-      h('button', { class: 'small', onclick: () => this.openChat() }, '💬'),
-      h('button', { class: 'small', onclick: () => this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom * 1.25, 0.4, 2)) }, '＋'),
-      h('button', { class: 'small', onclick: () => this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom * 0.8, 0.4, 2)) }, '－'),
-      h('button', { class: 'small', onclick: () => this.focus(this.view.turn) }, '◎'),
-      h('button', { class: 'small', onclick: () => this.cycleSpeed() }, `${store().speed}×`),
-      h('button', { class: 'small danger', onclick: () => this.quit() }, '退出')));
-    void bar;
+  /** ワールド座標 → フィールド領域内座標（0〜280） */
+  private toField(wx: number, wy: number) {
+    const v = this.cameras.main.worldView;
+    return { x: wx - v.x, y: wy - v.y };
   }
 
-  private cycleSpeed() {
-    update((s) => (s.speed = ((s.speed % 3) + 1) as 1 | 2 | 3));
-    toast(`演出速度 ${store().speed}×`);
-    this.buildUI();
-    this.renderStatus();
-    this.refreshAsk(true);
+  // ───────── ウィンドウ（フィールド内部座標） ─────────
+
+  private clearWins() {
+    fieldUI().querySelectorAll('.askwin').forEach((e) => e.remove());
   }
 
-  private quit() {
-    modal('退出しますか？', h('div', {}, this.host.kind === 'online' ? '切断後もCPUが代わりに操作します。' : '進行状況は保存されません。'), [{
-      label: '退出', cls: 'danger', on: () => { this.host.leave(); clearUI(); this.scene.start('Title'); },
-    }]);
+  private addWin(el: HTMLElement) {
+    el.classList.add('askwin');
+    fieldUI().append(el);
+    return el;
   }
 
-  private renderStatus() {
-    const v = this.view;
-    const lim = this.host.settings.turnLimit;
-    this.ui.status.replaceChildren(
-      h('div', { id: 'round' }, `ターン ${v.round}${lim ? ` / ${lim}` : ''}${this.host.spectator ? '（観戦中）' : ''}`),
-      ...v.players.map((p) => {
-        const c = CHARS[p.charId];
-        const card = h('div', { class: `pcard ${p.seat === v.turn ? 'turn' : ''}`, onclick: () => this.showItems(p.seat) },
-          h('div', { class: 'nm' }, h('span', {}, `${this.host.mySeats.has(p.seat) ? '▶' : ''}${p.name}${p.isCpu ? '(CPU)' : ''}`), h('span', { style: 'color:var(--accent)' }, `${p.rank}位`)),
-          h('div', { class: 'muted' }, `${c.role}　${p.gold}G　${p.steps}歩　運${p.luck}`,
-            p.cursed && h('span', { class: 'badge', style: 'background:#640a64' }, '呪'),
-            p.stun > 0 && h('span', { class: 'badge', style: 'background:#7a6400' }, `ピヨ${p.stun}`)),
-          h('div', { class: 'bar' }, h('i', { style: `width:${(100 * p.hp) / p.maxHp}%;background:var(--hp)` })),
-          h('div', { class: 'row', style: 'justify-content:space-between;font-size:11px' }, h('span', {}, `HP ${p.hp}/${p.maxHp}`), h('span', {}, `MP ${p.mp}/${p.maxMp}`)),
-          p.maxMp > 0 && h('div', { class: 'bar' }, h('i', { style: `width:${(100 * p.mp) / p.maxMp}%;background:var(--mp)` })),
-        );
-        return card;
-      }),
-      ...(this.host.spectator ? [] : [h('button', { onclick: () => this.showItems([...this.host.mySeats][0] ?? 0) }, '所持品')]),
-    );
+  private descWin: HTMLElement | null = null;
+  private showDesc(it: MenuItem | null) {
+    this.descWin?.remove();
+    this.descWin = null;
+    if (!it?.desc) return;
+    this.descWin = this.addWin(centerWin(140, 240, h('div', {}, it.label), h('div', { style: 'font-size:12px' }, it.desc)));
   }
 
-  private itemGrid(p: PublicPlayer, usable: number[] | null, onUse?: (slot: number) => void): HTMLElement {
-    return h('div', { class: 'items' }, ...p.items.map((id, slot) => {
-      const d = ITEMS[id];
-      const ok = usable ? usable.includes(slot) : true;
-      const el = h('div', { class: `item ${usable && !ok ? 'off' : ''}`, onclick: () => ok && onUse?.(slot) },
-        h('span', { style: iconStyle(id) }), h('span', {}, d.name, d.mp ? h('div', { class: 'muted' }, `MP${d.mp}`) : null));
-      longPress(el, () => `${d.name}：${d.desc}`);
-      return el;
-    }), ...Array.from({ length: C.SLOTS - p.items.length }, () => h('div', { class: 'item off' }, '―')));
+  private gotWin(icon: number | null, text: string) {
+    const el = centerWin(140, 140, icon ? h('span', { style: `${iconStyle(icon)};vertical-align:middle;margin-right:6px` }) : null, text);
+    fieldUI().append(el);
+    this.time.delayedCall(frames(30), () => el.remove());
   }
-
-  private showItems(seat: number) {
-    const p = this.view.players[seat];
-    if (!p) return;
-    modal(`${p.name}の所持品（${p.items.length}/${C.SLOTS}）`, h('div', { class: 'col' }, this.itemGrid(p, null), h('div', { class: 'muted' }, '長押しで説明を表示')));
-  }
-
-  private log(text: string) {
-    this.logLines.push(text);
-    if (this.logLines.length > 6) this.logLines.shift();
-    this.ui.log.replaceChildren(...this.logLines.map((l) => h('div', {}, l)));
-  }
-
-  private chatLines: { text: string; color: string }[] = [];
-  private addChat(text: string, color: string) {
-    this.chatLines.push({ text, color });
-    this.log(text);
-  }
-
-  private openChat() {
-    const input = h('input', { maxLength: 80, style: 'width:300px', placeholder: 'メッセージ' });
-    let color = store().chatColor;
-    const body = h('div', { class: 'col' },
-      h('div', { class: 'chatlog', style: 'height:120px;width:420px' }, ...this.chatLines.slice(-30).map((c) => h('div', { style: `color:${c.color}` }, c.text))),
-      h('div', { class: 'row' }, input, ...CHAT_COLORS.map((c, i) => h('button', { class: 'small', style: `background:${c};width:18px;height:18px;padding:0`, onclick: () => { color = i; update((s) => (s.chatColor = i)); } }))),
-      h('div', { class: 'row' }, ...STAMPS.map((s, i) => h('button', { class: 'small', onclick: () => { this.host.sendStamp(i); wrap.remove(); } }, s))));
-    const wrap = modal('チャット・スタンプ', body, [{ label: '送信', cls: 'primary', on: () => input.value.trim() && this.host.sendChat(input.value.trim(), color) }]);
-  }
-
-  private showStamp(seat: number, id: number, from: string) {
-    this.addChat(`${from}：[${STAMPS[id]}]`, '#ffffff');
-    const s = this.heroes[seat];
-    if (!s) return;
-    const cam = this.cameras.main;
-    const x = (s.x - cam.worldView.x) * cam.zoom;
-    const y = (s.y - 50 - cam.worldView.y) * cam.zoom;
-    if (x < 0 || x > 640 || y < 0 || y > 480) return;
-    const el = mount(h('div', { class: 'stamp', style: `left:${x}px;top:${y}px` }, STAMPS[id]));
-    setTimeout(() => el.remove(), 2500);
-  }
-
-  private hint(key: string) {
-    if (!this.host.tutorial || this.hinted.has(key) || !TUTORIAL[key]) return;
-    this.hinted.add(key);
-    toast(`💡 ${TUTORIAL[key]}`, 4000);
-  }
-
-  // ───────── 入力待ち ─────────
 
   private refreshAsk(force = false) {
     if (this.busy || this.queue.length) return;
     const ask = this.host.ask;
-    if (!force && JSON.stringify(ask) === JSON.stringify(this.shownAsk)) return;
-    this.shownAsk = ask;
-    this.ui.dialog.replaceChildren();
-    this.ui.dialog.className = 'pass';
+    const key = JSON.stringify(ask);
+    if (!force && key === this.shownAsk) return;
+    this.shownAsk = key;
+    this.clearWins();
+    this.showDesc(null);
     if (this.host.kind === 'online' && (this.host as OnlineHost).proxied) {
-      this.ui.dialog.className = '';
-      this.ui.dialog.replaceChildren(h('div', { class: 'panel', style: 'position:absolute;left:200px;top:60px' }, 'CPUが代行中です ',
-        h('button', { class: 'primary small', onclick: () => (this.host as OnlineHost).resume() }, '操作に戻る')));
-      this.host.idle();
+      this.addWin(menuWin([{ label: 'CPUが代行中', disabled: true }, { label: '操作に戻る', on: () => (this.host as OnlineHost).resume() }], 'left:16px;top:16px'));
       return;
     }
     if (!ask || this.view.over) return;
+    // 問いかけはシステムメッセージとして流す
+    if (ask.kind === 'select' && this.streamedAsk !== key) system(ask.title);
+    this.streamedAsk = key;
     if (!this.host.mySeats.has(ask.seat)) {
-      const p = this.view.players[ask.seat];
-      if (p && !this.host.spectator) this.ui.dialog.replaceChildren(h('div', { class: 'toast', style: 'top:auto;bottom:40px' }, `${p.name}が考え中…`));
       this.host.idle();
       return;
     }
-    this.ui.dialog.className = '';
+    closeLog(); // 手番が来たらログは自動で閉じる
     const send = (inp: Parameters<Host['send']>[0]) => {
       se('select');
-      this.ui.dialog.replaceChildren();
+      this.clearWins();
+      this.showDesc(null);
       this.host.send(inp);
     };
     const p = this.view.players[ask.seat];
-    let box: HTMLElement;
     if (ask.kind === 'action') {
-      this.hint('action');
-      this.focus(ask.seat);
-      box = h('div', { class: 'panel dialog' },
-        h('div', { class: 'q' }, `${p.name}のターン！`),
-        h('div', { class: 'opts' },
-          h('button', { class: 'primary', onclick: () => send({ type: 'roll' }) }, '🎲 さいころ'),
-          h('button', { onclick: () => this.pickItem(p, ask.items, (slot) => send({ type: 'useItem', slot })) }, `アイテム（${ask.items.length}）`)));
+      this.lookAt(ask.seat);
+      this.addWin(menuWin([
+        { label: '移動', on: () => send({ type: 'roll' }) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+      ], 'left:16px;top:16px'));
     } else if (ask.kind === 'battle') {
-      this.hint('battle');
-      box = h('div', { class: 'panel dialog' },
-        h('div', { class: 'q' }, 'どうする？'),
-        h('div', { class: 'opts' },
-          h('button', { class: 'primary', onclick: () => send({ type: 'battleAttack' }) }, '⚔ たたかう'),
-          h('button', { onclick: () => this.pickItem(p, ask.items, (slot) => send({ type: 'useItem', slot })) }, `アイテム（${ask.items.length}）`)));
+      this.addWin(menuWin([
+        { label: 'たたかう', on: () => send({ type: 'battleAttack' }) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+      ], 'left:16px;top:200px'));
     } else {
-      this.hint(ask.sub);
-      box = h('div', { class: 'panel dialog' },
-        h('div', { class: 'q' }, ask.title, ask.sub === 'shop' || ask.sub === 'smith' || ask.sub === 'casino_bet' ? h('span', { class: 'muted' }, `（所持金 ${p.gold}G）`) : null),
-        h('div', { class: 'opts' }, ...ask.options.map((o, i) => {
-          const b = h('button', { disabled: !!o.disabled, onclick: () => send({ type: 'select', index: i }) },
-            o.value && ITEMS[o.value] ? h('span', { style: `${iconStyle(o.value)};vertical-align:middle;transform:scale(.7)` }) : null, o.label);
-          if (o.value && ITEMS[o.value]) longPress(b, () => ITEMS[o.value!].desc);
-          return b;
-        })));
+      this.addWin(menuWin(ask.options.map((o, i) => ({
+        label: o.label, disabled: o.disabled,
+        icon: o.value && ITEMS[o.value] ? iconStyle(o.value) : undefined,
+        desc: o.value && ITEMS[o.value] ? ITEMS[o.value].desc : undefined,
+        on: () => send({ type: 'select', index: i }),
+      })), 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
     }
-    this.ui.dialog.replaceChildren(box);
   }
 
-  private pickItem(p: PublicPlayer, usable: number[], onUse: (slot: number) => void) {
-    const wrap = modal('アイテムを使う', h('div', { class: 'col' }, this.itemGrid(p, usable, (slot) => { wrap.remove(); onUse(slot); }), h('div', { class: 'muted' }, '使えるアイテムだけ選べます（長押しで説明）')));
+  private itemList(p: PublicPlayer, usable: number[], onUse: (slot: number) => void) {
+    this.clearWins();
+    const items: MenuItem[] = p.items.map((id, slot) => ({
+      label: ITEMS[id].name + (ITEMS[id].mp ? `（MP${ITEMS[id].mp}）` : ''),
+      icon: iconStyle(id), desc: ITEMS[id].desc, disabled: !usable.includes(slot), on: () => onUse(slot),
+    }));
+    items.push({ label: 'もどる', on: () => this.refreshAsk(true) });
+    this.addWin(menuWin(items, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
   }
 
   private tickTimer() {
     const ask = this.host.ask;
     const dl = this.host.deadline;
-    if (!ask || !dl || !this.host.mySeats.has(ask.seat) || this.busy) {
-      this.ui.timer.textContent = '';
+    const left = Math.ceil((dl - Date.now()) / 1000);
+    const show = !!ask && !!dl && this.host.mySeats.has(ask.seat) && !this.busy && left >= 0 && left <= this.host.settings.timeLimit - C.DRAW_LIMIT_TIME;
+    if (!show) {
+      this.timerWin?.remove();
+      this.timerWin = null;
       return;
     }
-    const left = Math.ceil((dl - Date.now()) / 1000);
-    // 経過が DRAW_LIMIT_TIME を超えたら残り秒数を表示
-    this.ui.timer.textContent = left <= this.host.settings.timeLimit - C.DRAW_LIMIT_TIME && left >= 0 ? `残り ${left} 秒` : '';
+    const y = this.battle.active ? 32 : 240;
+    const text = `あと${left}秒でターン終了`;
+    if (!this.timerWin) this.timerWin = fieldUI().appendChild(centerWin(140, y, text));
+    this.timerWin.textContent = text;
+    this.timerWin.style.top = `${y}px`;
   }
 
   // ───────── 演出 ─────────
 
-  private wait(ms: number) {
-    return new Promise<void>((r) => this.time.delayedCall(ms / store().speed, r));
-  }
-
   private async pump() {
     if (this.busy) return;
     this.busy = true;
-    this.ui.dialog.replaceChildren();
-    this.shownAsk = null;
+    this.clearWins();
+    this.showDesc(null);
+    this.shownAsk = '';
     while (this.queue.length) {
       const b = this.queue.shift()!;
       for (const e of b.events) {
@@ -438,16 +345,15 @@ export class Field extends Phaser.Scene {
     v.players.forEach((p) => {
       const s = this.heroes[p.seat];
       if (!s) return;
-      this.placeHero(p.seat, p.x, p.y, v.players);
-      if (!s.anims.isPlaying || s.anims.currentAnim?.key.includes('_')) this.faceHero(p.seat, p.dir, false);
+      this.placeHero(p.seat, p.x, p.y);
+      this.faceHero(p.seat, p.dir, false);
       s.setAlpha(1).setAngle(0);
       this.setMarks(p);
     });
     const removed = new Set(v.removed);
     this.objSprites.forEach((s, i) => s?.setVisible(!removed.has(i)));
-    const cur = this.heroes[v.turn];
-    if (cur) this.cursor.setPosition(cur.x, cur.y - 48);
-    this.renderStatus();
+    this.restack();
+    this.status.draw(v, v.turn);
   }
 
   private setMarks(p: PublicPlayer) {
@@ -455,217 +361,260 @@ export class Field extends Phaser.Scene {
     list.forEach((m) => m.destroy());
     list.length = 0;
     const s = this.heroes[p.seat];
-    if (p.stun > 0) list.push(this.add.sprite(s.x, s.y - 40, 'fx/piyo').play('fx/piyo').setScale(0.6).setDepth(999));
-    if (p.cursed) list.push(this.add.sprite(s.x + 14, s.y - 30, 'fx/curse').play('fx/curse').setScale(0.4).setDepth(999));
+    if (p.stun > 0) list.push(this.add.sprite(s.x, s.y - 22, 'fx/piyo').play('fx/piyo').setScale(0.5).setDepth(99999));
+    if (p.cursed) list.push(this.add.sprite(s.x + 10, s.y - 18, 'fx/curse').play('fx/curse').setScale(0.35).setDepth(99999));
   }
 
-  private fxAt(name: string, x: number, y: number, scale = 1) {
+  private fxAt(name: string, wx: number, wy: number, scale = 0.7) {
     if (!this.textures.exists(`fx/${name}`)) return;
-    const s = this.add.sprite(x, y, `fx/${name}`).setDepth(2000).setScale(scale).play(`fx/${name}`);
+    const s = this.add.sprite(wx, wy, `fx/${name}`).setDepth(99998).setScale(scale).play(`fx/${name}`);
     s.once('animationcomplete', () => s.destroy());
   }
 
-  private float(seat: number, text: string, color: string) {
+  private popAt(seat: number, sheet: string, value: number) {
+    if (this.battle.active && seat === this.view.battle?.seat) {
+      this.overlay.pop(sheet, value, 200, 170);
+      return;
+    }
     const s = this.heroes[seat];
     if (!s) return;
-    const t = this.add.text(s.x, s.y - 40, text, { fontSize: '20px', color, stroke: '#000', strokeThickness: 4, fontStyle: 'bold' }).setOrigin(0.5).setDepth(2001);
-    this.tweens.add({ targets: t, y: t.y - 28, alpha: 0, duration: 1100 / store().speed, onComplete: () => t.destroy() });
+    const p = this.toField(s.x, s.y - 20);
+    this.overlay.pop(sheet, value, p.x, p.y);
   }
 
   private name(seat: number) {
     return this.view.players[seat]?.name ?? '?';
   }
 
+  private updateEnemyHp(hp: number, max: number) {
+    // 敵HP表示（UI_LAYOUT §6 / 図：左上(24,128) 100×16）
+    if (!this.hpWin) this.hpWin = fieldUI().appendChild(h('div', { class: 'win', style: 'left:24px;top:128px;width:100px;height:16px;font-size:11px;line-height:14px;padding:0 6px' }));
+    this.hpWin.textContent = `敵HP ${Math.max(0, hp)}/${max}`;
+  }
+
   private async play(e: GameEvent, end: PublicView): Promise<void> {
     const inBattle = this.battle.active;
     switch (e.t) {
-      case 'turn': {
+      case 'turn':
         this.view = { ...this.view, turn: e.seat, round: e.round };
-        this.renderStatus();
-        this.focus(e.seat);
-        const s = this.heroes[e.seat];
-        this.cursor.setPosition(s.x, s.y - 48);
+        this.restack();
+        this.status.draw(this.view, e.seat);
+        this.lookAt(e.seat);
         if (this.host.mySeats.has(e.seat)) se('turn');
-        this.log(`― ${this.name(e.seat)}のターン ―`);
-        await this.wait(250);
+        system(`${this.name(e.seat)}の番です`);
+        await wait(this, frames(6));
         return;
-      }
       case 'skip':
         se('piyo');
-        toast(`${this.name(e.seat)}は動けない！`);
-        await this.wait(700);
+        await wait(this, frames(16));
         return;
       case 'dice':
-        await this.hud.roll(e.values, e.ichi);
+        if (inBattle && (e.purpose === 'attack' || e.purpose === 'enemy')) await this.battle.attack(e.purpose === 'attack');
+        await this.overlay.roll(e.values, e.ichi);
         return;
       case 'move': {
         const seat = e.seat;
         const s = this.heroes[seat];
-        this.focus(seat);
+        this.lookAt(seat);
         this.cursor.setVisible(false);
         let px = Math.floor(s.x / T);
-        let py = Math.floor(s.y / T);
+        let py = Math.floor((s.y - CHR_OFFS_Y) / T);
         for (const c of e.cells) {
           const dir = c.x > px ? 'right' : c.x < px ? 'left' : c.y > py ? 'down' : 'up';
           this.faceHero(seat, dir, true);
-          const { px: tx, py: ty } = this.heroPos(seat, c.x, c.y, []);
-          await new Promise<void>((r) => this.tweens.add({ targets: s, x: tx, y: ty, duration: (5 / 24) * 1000 / store().speed, onComplete: () => r() }));
-          s.setDepth(c.y + 0.5);
+          // 1マス 5 フレームの直線補間
+          await tween(this, { targets: s, x: c.x * T + T / 2, y: c.y * T + T / 2 + CHR_OFFS_Y, duration: frames(5) });
+          this.shadows[seat].setPosition(s.x, s.y - CHR_OFFS_Y + 8);
+          s.setDepth(this.depthOf(c.y, 6));
           se('step');
           px = c.x;
           py = c.y;
+          // 歩き終わるたびにそのマスの矢印方向へ向きを変える
+          const arrow = this.map.cell(c.x, c.y)?.c ?? '';
+          this.faceHero(seat, ARROWS.includes(arrow) ? arrow : dir, true);
         }
         s.stop();
         this.faceHero(seat, end.players[seat]?.dir ?? 'down', false);
-        this.cursor.setVisible(true).setPosition(s.x, s.y - 48);
+        this.cursor.setVisible(true);
+        this.restack();
         return;
       }
       case 'msg':
-        this.log(e.text);
-        if (!inBattle || e.seat === undefined) toast(e.text, 1400 / store().speed);
-        else void this.hud.banner(e.text, '#ffffff', 900);
-        await this.wait(450);
+        system(e.text);
+        await wait(this, frames(8));
         return;
       case 'damage':
         se('damage');
-        if (inBattle && e.seat === this.view.battle?.seat) return;
-        this.float(e.seat, `-${e.amount}`, '#ff5050');
-        this.cameras.main.shake(150, 0.006);
-        await this.wait(300);
+        this.popAt(e.seat, 'num/damage', e.amount);
+        if (!inBattle) this.cameras.main.shake(120, 0.01);
+        await wait(this, frames(8));
         return;
       case 'heal':
         se('heal');
-        if (inBattle) this.battle.heal(e.amount);
-        else this.float(e.seat, `+${e.amount}`, '#60ff80');
-        await this.wait(300);
+        this.popAt(e.seat, 'num/heal', e.amount);
+        await wait(this, frames(8));
         return;
       case 'gold':
-        if (e.amount > 0) se('gold');
-        this.float(e.seat, `${e.amount >= 0 ? '+' : ''}${e.amount}G`, '#ffe060');
-        await this.wait(250);
+        if (e.amount > 0) {
+          se('gold');
+          this.popAt(e.seat, 'num/gold', e.amount);
+          if (this.host.mySeats.has(e.seat)) this.gotWin(null, `${e.amount}G 手に入れた！`);
+        }
+        await wait(this, frames(6));
         return;
       case 'getItem':
         se('get');
-        this.log(`${this.name(e.seat)}は${ITEMS[e.item].name}を手に入れた`);
-        await this.wait(300);
+        system(`${this.name(e.seat)}は${ITEMS[e.item].name}を手に入れた！`);
+        if (this.host.mySeats.has(e.seat)) this.gotWin(e.item, `${ITEMS[e.item].name}を手に入れた！`);
+        await wait(this, frames(10));
         return;
       case 'loseItem':
-        this.log(`${this.name(e.seat)}の${ITEMS[e.item].name}がなくなった`);
         return;
       case 'objRemove': {
         const s = this.objSprites[e.idx];
-        if (s) this.tweens.add({ targets: s, alpha: 0, duration: 300, onComplete: () => s.setVisible(false).setAlpha(1) });
+        if (s) this.tweens.add({ targets: s, alpha: 0, duration: frames(6), onComplete: () => s.setVisible(false).setAlpha(1) });
         return;
       }
       case 'chestOpen':
         this.objSprites[e.idx]?.setTexture('obj/chest_open');
-        await this.wait(400);
+        await wait(this, frames(8));
         return;
       case 'fx': {
+        if (inBattle) return;
         const s = e.seat !== undefined ? this.heroes[e.seat] : null;
         const x = s ? s.x : (e.x ?? 0) * T + T / 2;
-        const y = s ? s.y - 16 : (e.y ?? 0) * T + T / 2;
-        if (inBattle && e.name === 'explosion') return;
+        const y = s ? s.y : (e.y ?? 0) * T + T / 2;
         if (e.name === 'explosion') se('explode');
         if (e.name === 'warp') se('warp');
-        this.fxAt(e.name, x, y, e.name === 'explosion' ? 1.3 : 1);
-        await this.wait(500);
+        this.fxAt(e.name, x, y);
+        await wait(this, frames(10));
         return;
       }
       case 'battleStart': {
-        const p = this.view.players[e.seat];
         const enemy = ENEMIES[e.enemy];
+        const hp = this.view.enemyHp[e.obj] ?? enemy.hp;
         bgm(enemy.boss ? 'boss' : 'battle');
-        this.ui.dialog.replaceChildren();
-        await this.hud.encount();
-        this.view = { ...this.view, battle: { seat: e.seat, obj: e.obj, enemy: e.enemy, hp: this.view.enemyHp[e.obj] ?? enemy.hp, maxHp: enemy.hp, phase2: false } };
-        this.battle.begin(e.enemy, this.view.enemyHp[e.obj] ?? enemy.hp, p);
+        this.clearWins();
+        await this.overlay.encount();
+        this.view = { ...this.view, battle: { seat: e.seat, obj: e.obj, enemy: e.enemy, hp, maxHp: enemy.hp, phase2: false } };
+        this.battle.begin(e.enemy, hp, this.view.players[e.seat]);
+        this.updateEnemyHp(hp, enemy.hp);
         return;
       }
       case 'battleHit':
-        await this.battle.hit(e.target, e.amount, e.fx);
+        if (e.fx !== 'hit') await this.battle.magic(e.fx);
+        if (e.target === 'enemy') {
+          this.battle.hp -= e.amount;
+          this.updateEnemyHp(this.battle.hp, this.battle.maxHp);
+          this.overlay.pop('num/damage', e.amount, 80, 50);
+          se('hit');
+          await wait(this, frames(12));
+        }
         return;
       case 'phase2':
-        await this.hud.banner('第2形態！', '#ff6060');
         await this.battle.phase2();
         return;
       case 'battleEnd':
         await this.battle.end(e.result);
+        this.hpWin?.remove();
+        this.hpWin = null;
         this.view = { ...this.view, battle: null };
         bgm('field');
         return;
       case 'death':
         se('lose');
-        if (!inBattle) await new Promise<void>((r) => this.tweens.add({ targets: this.heroes[e.seat], alpha: 0.2, angle: 90, duration: 500, onComplete: () => r() }));
+        if (!inBattle) await tween(this, { targets: this.heroes[e.seat], alpha: 0.2, angle: 90, duration: frames(12) });
         return;
       case 'revive':
-        if (inBattle) this.battle.revive();
-        this.fxAt('heal', this.heroes[e.seat].x, this.heroes[e.seat].y - 16);
-        await this.wait(400);
+        this.fxAt('heal', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(10));
         return;
       case 'respawn': {
         const r = end.players[e.seat]?.respawn;
-        const s = this.heroes[e.seat];
         if (r) {
-          const { px, py } = this.heroPos(e.seat, r.x, r.y, []);
-          s.setPosition(px, py).setAlpha(1).setAngle(0);
+          this.placeHero(e.seat, r.x, r.y);
+          this.heroes[e.seat].setAlpha(1).setAngle(0);
           se('warp');
-          this.fxAt('warp', px, py - 16);
+          this.lookAt(e.seat);
+          this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
         }
-        await this.wait(400);
+        await wait(this, frames(10));
         return;
       }
       case 'warp': {
         const p = end.players[e.seat];
-        const s = this.heroes[e.seat];
         se('warp');
-        this.fxAt('warp', s.x, s.y - 16);
-        await this.wait(400);
-        if (p) this.placeHero(e.seat, p.x, p.y, end.players);
-        this.fxAt('warp', s.x, s.y - 16);
-        this.focus(e.seat);
-        await this.wait(400);
+        this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(10));
+        if (p) this.placeHero(e.seat, p.x, p.y);
+        this.lookAt(e.seat);
+        this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(10));
         return;
       }
       case 'swap': {
         const a = this.heroes[e.a];
         const b = this.heroes[e.b];
         se('swap');
-        this.fxAt('swap', a.x, a.y - 16);
-        this.fxAt('swap', b.x, b.y - 16);
-        await this.wait(500);
-        const ax = a.x, ay = a.y;
+        this.lookAt(e.a);
+        this.fxAt('swap', a.x, a.y);
+        await wait(this, frames(12));
+        const ax = a.x;
+        const ay = a.y;
         a.setPosition(b.x, b.y);
         b.setPosition(ax, ay);
-        await this.wait(300);
+        this.restack();
+        this.lookAt(e.a);
+        this.fxAt('swap', a.x, a.y);
+        await wait(this, frames(12));
         return;
       }
       case 'paru':
-        await this.hud.paru(e.kiwami);
+        this.lookAt(e.seat);
+        await this.overlay.paru(e.kiwami);
         return;
       case 'stun':
         se('piyo');
-        this.fxAt('piyo', this.heroes[e.seat].x, this.heroes[e.seat].y - 30);
-        await this.wait(400);
+        this.lookAt(e.seat);
+        this.fxAt('piyo', this.heroes[e.seat].x, this.heroes[e.seat].y - 20);
+        await wait(this, frames(10));
         return;
       case 'curse':
         se('curse');
-        this.fxAt('curse', this.heroes[e.seat].x, this.heroes[e.seat].y - 20);
-        await this.wait(300);
+        this.fxAt('curse', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(8));
         return;
-      case 'gameOver': {
+      case 'gameOver':
         bgm('win');
         se('win');
-        await this.hud.banner(`${this.name(e.winner)}の優勝！`, '#ffe060', 2200);
         this.tracker.gameOver(e.winner, this.host.kind !== 'replay' && !this.host.spectator);
         if (this.host.tutorial) {
           unlock('tutorial');
           update((s) => (s.tutorialDone = true));
         }
         this.applyView(end);
-        this.scene.start('Result', { host: this.host, view: end, reason: e.reason });
+        this.result(e.winner);
         return;
-      }
     }
+  }
+
+  /** 結果（UI_LAYOUT §5）：閉じるとゲーム終了 */
+  private result(winner: number) {
+    const close = () => {
+      if (this.host.kind === 'online') net.leave();
+      this.scene.start('Menu');
+    };
+    const items: MenuItem[] = [{ label: '閉じる', on: close }];
+    if (this.host.kind === 'online') items.unshift({ label: 'リマッチ', on: () => net.send('rematch') });
+    items.unshift({
+      label: 'リプレイ保存', on: async () => {
+        const d = await this.host.replayData();
+        if (d) h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })), download: `beefhunter_replay_${Date.now()}.json` }).click();
+      },
+    });
+    $('overlay').append(h('div', { class: 'win', style: 'left:50%;top:40%;transform:translate(-50%,-50%);padding:10px 14px;text-align:center' },
+      h('div', { style: 'font-size:16px' }, `優勝者は ${this.name(winner)} さんです！`),
+      h('div', { style: 'font-size:12px;margin:4px 0' }, 'このウィンドウを閉じるとゲームを終了します'),
+      menuWin(items, 'position:static;border:0')));
   }
 }

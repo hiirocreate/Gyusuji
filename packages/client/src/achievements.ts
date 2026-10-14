@@ -1,7 +1,7 @@
 import { ENEMIES, ITEM } from '@gyusuji/shared';
 import type { GameEvent, PublicView } from '@gyusuji/shared';
 import { store, update } from './store.js';
-import { toast } from './ui.js';
+import { system } from './chat.js';
 
 export const ACHIEVEMENTS: { id: string; name: string; desc: string }[] = [
   { id: 'first_win', name: '初優勝', desc: 'はじめて優勝する' },
@@ -22,7 +22,7 @@ export function unlock(id: string): void {
   if (store().achievements[id]) return;
   update((s) => (s.achievements[id] = Date.now()));
   const a = ACHIEVEMENTS.find((x) => x.id === id);
-  if (a) toast(`🏆 実績解除：${a.name}`, 2500);
+  if (a) system(`実績解除：${a.name}`);
 }
 
 /** 自分の席に関するイベントを見て実績を更新 */

@@ -17,4 +17,11 @@ export const C = {
 } as const;
 
 export const STAMPS = ['よろしく！', 'ナイス！', 'ごめん…', 'やったー', 'うそでしょ', 'がんばれ', 'ありがとう', 'GG'];
-export const CHAT_COLORS = ['#ffffff', '#ff8080', '#80c0ff', '#ffe060'];
+/** チャット文字色：黒→赤→緑→青（UI_LAYOUT §4.1） */
+export const CHAT_COLORS = ['#000000', '#ff3030', '#30c040', '#3070ff'];
+export const SYSTEM_COLOR = '#FFE650';
+export const CHAT_MAX = 40;
+export const ROOM_SLOTS = 8;
+/** クライアントとサーバのプロトコル版数。不一致なら入室させない */
+export const PROTOCOL_VERSION = 2;
+export type Platform = 'android' | 'ios-web' | 'web';

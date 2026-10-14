@@ -19,6 +19,8 @@ export interface Store {
   tutorialDone: boolean;
   chatColor: number;
   sound: boolean;
+  /** 流れるメッセージ：表示する／システムのみ／表示しない */
+  stream: 'all' | 'system' | 'none';
 }
 
 const defaults = (): Store => ({
@@ -32,6 +34,7 @@ const defaults = (): Store => ({
   tutorialDone: false,
   chatColor: 0,
   sound: true,
+  stream: 'all',
 });
 
 let cache: Store | null = null;

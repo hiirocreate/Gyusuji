@@ -1,6 +1,6 @@
 import { Room, type Client } from 'colyseus';
 import {
-  C, CHAT_COLORS, CLASSIC_PRESET, DEFAULT_SETTINGS, Runner, STAMPS,
+  C, CHAT_COLORS, CHAT_MAX, CLASSIC_PRESET, DEFAULT_SETTINGS, PROTOCOL_VERSION, Runner, STAMPS,
 } from '@gyusuji/shared';
 import type { Ask, Input, SeatInit, Settings } from '@gyusuji/shared';
 import { RoomStateS, SeatS } from './schema.js';
@@ -14,12 +14,17 @@ interface JoinOptions {
   token?: string;
   friendCode?: string;
   takeSeat?: number;
+  slot?: number;
+  protocol?: number;
+  platform?: string;
 }
 
 interface Member {
   seat: number; // -1 = 観戦
   token: string;
   friendCode?: string;
+  /** android / ios-web / web（障害調査用。表示しない） */
+  platform: string;
 }
 
 export interface ReplayData {
@@ -47,16 +52,22 @@ export class GameRoom extends Room<RoomStateS> {
   private gameSeatOf: number[] = []; // room seat → game seat
   private roomSeatOf: number[] = []; // game seat → room seat
   private lastReplay: ReplayData | null = null;
+  /** キャラ選択を終えた席 */
+  private picked = new Set<number>();
 
   onCreate(options: JoinOptions) {
     this.setState(new RoomStateS());
     for (let i = 0; i < C.MAX_PLAYERS; i++) this.state.seats.push(new SeatS());
     this.state.code = rid(5);
-    this.setMetadata({ code: this.state.code, public: !!options.public, phase: 'lobby' });
-    if (!options.public) this.setPrivate(true);
+    this.setMetadata({ code: this.state.code, public: !!options.public, slot: options.slot ?? 0, phase: 'lobby', players: 0 });
+    if (!options.public && !options.slot) this.setPrivate(true);
     this.autoDispose = true;
 
-    this.onMessage('setChar', (c, m: { id: number }) => this.lobbySeat(c, (s) => { s.charId = clampInt(m?.id, 0, 4); }));
+    this.onMessage('setChar', (c, m: { id: number }) => this.lobbySeat(c, (s) => {
+      s.charId = clampInt(m?.id, 0, 4);
+      this.picked.add(this.members.get(c.sessionId)!.seat);
+      this.checkStart();
+    }));
     this.onMessage('setMap', (c, m: { id: number }) => this.hostOnly(c, () => { this.state.settings.map = clampInt(m?.id, 0, 2); }));
     this.onMessage('setSettings', (c, m: Partial<Settings> & { preset?: string }) => this.hostOnly(c, () => this.applySettings(m)));
     this.onMessage('setCpu', (c, m: { seat: number; on: boolean }) => this.hostOnly(c, () => {
@@ -73,7 +84,7 @@ export class GameRoom extends Room<RoomStateS> {
     }));
     this.onMessage('allowJoin', (c, m: { on: boolean }) => this.hostOnly(c, () => { this.state.allowJoin = !!m?.on; }, true));
     this.onMessage('chat', (c, m: { text: string; color: number }) => {
-      const text = String(m?.text ?? '').slice(0, 80).trim();
+      const text = String(m?.text ?? '').slice(0, CHAT_MAX).trim();
       if (!text) return;
       this.broadcast('chat', { from: this.nameOf(c), text, color: CHAT_COLORS[clampInt(m?.color, 0, 3)] });
     });
@@ -108,6 +119,7 @@ export class GameRoom extends Room<RoomStateS> {
   }
 
   onAuth(_c: Client, options: JoinOptions) {
+    if (options?.protocol !== PROTOCOL_VERSION) throw new Error('アプリを更新してください');
     if (options?.spectator) return true;
     if (options?.token && this.tokens.includes(options.token)) return true;
     if (this.state.phase === 'lobby') {
@@ -123,7 +135,7 @@ export class GameRoom extends Room<RoomStateS> {
     // 再接続（トークン）
     const ti = options?.token ? this.tokens.indexOf(options.token) : -1;
     if (ti >= 0) {
-      this.bindSeat(client, ti, options.token!, options.friendCode);
+      this.bindSeat(client, ti, options.token!, options.friendCode, options.platform);
       const s = this.seat(ti);
       s.connected = true;
       s.proxy = false;
@@ -133,7 +145,7 @@ export class GameRoom extends Room<RoomStateS> {
       return;
     }
     if (options?.spectator) {
-      this.members.set(client.sessionId, { seat: -1, token: '' });
+      this.members.set(client.sessionId, { seat: -1, token: '', platform: String(options.platform ?? 'web') });
       this.state.spectators++;
       this.sendCatchUp(client);
       return;
@@ -160,7 +172,7 @@ export class GameRoom extends Room<RoomStateS> {
     if (!midJoin) s.charId = seat % 5;
     const token = rid(16);
     this.tokens[seat] = token;
-    this.bindSeat(client, seat, token, options.friendCode);
+    this.bindSeat(client, seat, token, options.friendCode, options.platform);
     if (this.state.host < 0) this.state.host = seat;
     if (midJoin && this.runner) {
       const gs = this.gameSeatOf[seat];
@@ -191,6 +203,8 @@ export class GameRoom extends Room<RoomStateS> {
       s.ready = false;
       s.connected = false;
       this.tokens[mem.seat] = '';
+      this.picked.delete(mem.seat);
+      this.updateMeta();
       this.fixHost();
       this.checkStart();
       return;
@@ -224,12 +238,19 @@ export class GameRoom extends Room<RoomStateS> {
 
   // ───── ロビー ─────
 
-  private bindSeat(client: Client, seat: number, token: string, friendCode?: string) {
+  private bindSeat(client: Client, seat: number, token: string, friendCode?: string, platform?: string) {
     const fc = friendCode && /^\d{8}$/.test(friendCode) ? friendCode : undefined;
-    this.members.set(client.sessionId, { seat, token, friendCode: fc });
+    this.members.set(client.sessionId, { seat, token, friendCode: fc, platform: String(platform ?? 'web') });
+    this.updateMeta();
     if (fc) friendRooms.set(fc, this.roomId);
     client.send('seat', { seat, token, roomId: this.roomId, code: this.state.code });
     this.sendCatchUp(client);
+  }
+
+  /** 部屋選択画面用（人数・ゲーム中・満員） */
+  private updateMeta() {
+    const players = this.state.seats.filter((s) => s.kind === 'human').length;
+    this.setMetadata({ ...this.metadata, players, phase: this.state.phase });
   }
 
   private sendCatchUp(client: Client) {
@@ -282,7 +303,9 @@ export class GameRoom extends Room<RoomStateS> {
   private checkStart() {
     if (this.state.phase !== 'lobby') return;
     const humans = this.state.seats.filter((s) => s.kind === 'human');
-    if (!humans.length || !humans.every((s) => s.ready)) return;
+    // 4人揃うか、全員が「ゲーム開始」を押すと開始
+    const all4 = humans.length === C.MAX_PLAYERS && this.state.seats.every((s, i) => s.kind !== 'human' || this.picked.has(i));
+    if (!humans.length || (!all4 && !humans.every((s) => s.ready))) return;
     this.startGame();
   }
 
@@ -318,7 +341,7 @@ export class GameRoom extends Room<RoomStateS> {
     this.state.phase = 'playing';
     this.state.winner = -1;
     this.setMetadata({ ...this.metadata, phase: 'playing' });
-    this.setPrivate(true);
+    if (!this.metadata.slot) this.setPrivate(true);
     this.broadcast('start', { seatMap: this.gameSeatOf, settings: this.settingsObj(), seats: this.seatInits, view: JSON.stringify(this.runner.game.view()) });
     this.publish(this.runner.drain());
     this.kick();
