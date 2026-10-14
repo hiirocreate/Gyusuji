@@ -91,6 +91,17 @@ export class GameRoom extends Room<RoomStateS> {
       const humans = this.state.seats.filter((s) => s.kind === 'human' && s.connected);
       if (humans.length && humans.every((s) => s.rematch)) this.startGame();
     });
+    // CPU 代行中のプレイヤーが操作を取り戻す
+    this.onMessage('resume', (c) => {
+      const m = this.members.get(c.sessionId);
+      if (!m || m.seat < 0 || this.state.phase !== 'playing') return;
+      const s = this.seat(m.seat);
+      if (!s.proxy) return;
+      s.proxy = false;
+      this.timeouts[m.seat] = 0;
+      this.pushSystem(`${s.name}さんが操作に戻りました`);
+      this.kick();
+    });
     this.onMessage('replay', (c) => {
       if (this.lastReplay) c.send('replay', this.lastReplay);
     });
@@ -308,7 +319,7 @@ export class GameRoom extends Room<RoomStateS> {
     this.state.winner = -1;
     this.setMetadata({ ...this.metadata, phase: 'playing' });
     this.setPrivate(true);
-    this.broadcast('start', { seatMap: this.gameSeatOf, settings: this.settingsObj(), seats: this.seatInits });
+    this.broadcast('start', { seatMap: this.gameSeatOf, settings: this.settingsObj(), seats: this.seatInits, view: JSON.stringify(this.runner.game.view()) });
     this.publish(this.runner.drain());
     this.kick();
   }

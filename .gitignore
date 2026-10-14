@@ -4,3 +4,8 @@ dist
 packages/client/android/app/build
 packages/client/android/.gradle
 *.jks
+e2e-out
+test-results
+packages/client/android/app/src/main/assets/public
+packages/client/android/app/src/main/assets/capacitor.config.json
+packages/client/android/app/src/main/assets/capacitor.plugins.json

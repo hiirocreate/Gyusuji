@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: beefhunter-server
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start -w packages/server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

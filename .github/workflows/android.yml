@@ -1,0 +1,40 @@
+name: android
+on:
+  push: { branches: [main] }
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env: { KEYSTORE_BASE64: "${{ secrets.KEYSTORE_BASE64 }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm ci
+      - run: npm test
+      - run: npm run build -w packages/client
+        env: { VITE_SERVER_URL: "${{ secrets.SERVER_URL }}" }
+      - run: npx cap sync android
+        working-directory: packages/client
+      - name: Decode keystore
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        run: echo "$KEYSTORE_BASE64" | base64 -d > packages/client/android/app/release.jks
+      - run: chmod +x gradlew && ./gradlew assembleRelease
+        working-directory: packages/client/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - run: cp packages/client/android/app/build/outputs/apk/release/*.apk app-release.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: app-release, path: app-release.apk }
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: BEEF HUNTER build ${{ github.run_number }}
+          files: app-release.apk

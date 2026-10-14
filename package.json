@@ -11,11 +11,13 @@
     "build": "npm run build -w packages/client && npm run build -w packages/server",
     "dev:server": "npm run dev -w packages/server",
     "dev:client": "npm run dev -w packages/client",
-    "typecheck": "tsc -p packages/shared && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit"
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client",
+    "e2e": "npm run build -w packages/client && cd packages/client && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/node": "20.17.10",
     "typescript": "5.6.3",
-    "vitest": "2.1.8",
-    "@types/node": "20.17.10"
+    "vitest": "2.1.8"
   }
 }
