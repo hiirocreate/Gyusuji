@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Web版（静的ファイルのみの Worker）。Cloudflare Workers Builds / GitHub Actions 共通
+  "name": "beef-hunter",
+  "compatibility_date": "2026-10-14",
+  "assets": {
+    "directory": "./packages/client/dist",
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -1,0 +1,647 @@
+import Phaser from 'phaser';
+import { C, ENEMIES, GameMap, ITEMS, MAPS } from '@gyusuji/shared';
+import type { Ask, GameEvent, PublicPlayer, PublicView } from '@gyusuji/shared';
+import { Tracker, unlock } from '../achievements.js';
+import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, classicTile, iconStyle, v2Tile } from '../assets.js';
+import { bgm, se } from '../audio.js';
+import { buildChatBar, closeLog, notify, say, setSender, system } from '../chat.js';
+import { onLayout } from '../layout.js';
+import { net, type Host, type OnlineHost } from '../net.js';
+import { update } from '../store.js';
+import { $, centerWin, fieldUI, h, menuWin, type MenuItem } from '../ui.js';
+import type { Battle } from './Battle.js';
+import type { Overlay } from './Overlay.js';
+import type { Status } from './Status.js';
+import { fieldCam, frames, tween, wait } from './fieldcam.js';
+
+const T = C.TILE;
+/** キャラの描画位置はマス中心から上へ10px（SQU_CHR_OFFS_Y） */
+const CHR_OFFS_Y = -10;
+/** キャラは少し寄りで表示（素材64px → 約58px） */
+const HERO_SCALE = 0.9;
+type Batch = { events: GameEvent[]; view: PublicView };
+const ARROWS = ['up', 'down', 'left', 'right'];
+
+export class Field extends Phaser.Scene {
+  private host!: Host;
+  private map!: GameMap;
+  private view!: PublicView;
+  private objSprites: (Phaser.GameObjects.Sprite | null)[] = [];
+  private heroes: Phaser.GameObjects.Sprite[] = [];
+  private shadows: Phaser.GameObjects.Ellipse[] = [];
+  private marks: Phaser.GameObjects.Sprite[][] = [];
+  private cursor!: Phaser.GameObjects.Sprite;
+  private queue: Batch[] = [];
+  private busy = false;
+  private battle!: Battle;
+  private overlay!: Overlay;
+  private status!: Status;
+  private tracker!: Tracker;
+  private shownAsk = '';
+  private streamedAsk = '';
+  private offs: (() => void)[] = [];
+  private actor = 0;
+  private hpWin: HTMLElement | null = null;
+  private timerWin: HTMLElement | null = null;
+
+  constructor() {
+    super('Field');
+  }
+
+  init(data: { host: Host }) {
+    this.host = data.host;
+    this.queue = [];
+    this.busy = false;
+    this.shownAsk = '';
+    this.streamedAsk = '';
+  }
+
+  create() {
+    const host = this.host;
+    this.view = host.view!;
+    this.map = new GameMap(MAPS[host.settings.map]);
+    this.tracker = new Tracker(host.mySeats);
+    fieldCam(this, true);
+    this.cameras.main.setBackgroundColor('#000000');
+    this.drawMap();
+    this.drawObjects();
+    this.drawHeroes();
+
+    this.scene.launch('Battle');
+    this.scene.launch('Overlay');
+    this.scene.launch('Status');
+    this.battle = this.scene.get('Battle') as Battle;
+    this.overlay = this.scene.get('Overlay') as Overlay;
+    this.status = this.scene.get('Status') as Status;
+    this.scene.bringToTop('Battle');
+    this.scene.bringToTop('Overlay');
+
+    buildChatBar();
+    $('chatbar').style.display = 'flex';
+    setSender(host.kind === 'online' ? (t, c) => host.sendChat(t, c) : null);
+
+    this.offs = [
+      host.batch.on((b) => { this.queue.push(b); void this.pump(); }),
+      host.askChanged.on(() => this.refreshAsk(true)),
+      host.kind === 'online' ? host.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })) : () => {},
+      onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); })),
+    ];
+    this.events.once('shutdown', () => {
+      this.offs.forEach((f) => f());
+      fieldUI().replaceChildren();
+      closeLog();
+      this.scene.stop('Battle');
+      this.scene.stop('Overlay');
+      this.scene.stop('Status');
+    });
+    this.time.addEvent({ delay: 250, loop: true, callback: () => this.tickTimer() });
+    bgm('field');
+    this.time.delayedCall(0, () => {
+      this.applyView(this.view);
+      this.lookAt(this.view.turn);
+      if ('start' in host) (host as unknown as { start(): void }).start();
+      this.refreshAsk(true);
+    });
+  }
+
+  // ───────── 描画 ─────────
+
+  private drawMap() {
+    const d = this.map.data;
+    const v2 = d.terrainSet === 'v2';
+    const blits: Record<string, Phaser.GameObjects.Blitter> = {};
+    const blit = (tex: string, x: number, y: number) => {
+      blits[tex] ??= this.add.blitter(0, 0, `${tex}+`).setDepth(-2);
+      blits[tex].create(x * T - 1, y * T - 1);
+    };
+    // タイルは縁を1px延長した版を1pxずらして重ねる（拡大時の隙間対策）
+    const sea0 = this.add.blitter(-1, -1, 'tiles/sea_0+').setDepth(-3);
+    const sea1 = this.add.blitter(-1, -1, 'tiles/sea_1+').setDepth(-3).setVisible(false);
+    // 画面外も海で埋める
+    for (let y = -6; y < d.height + 6; y++) {
+      for (let x = -6; x < d.width + 6; x++) {
+        const inside = x >= 0 && y >= 0 && x < d.width && y < d.height;
+        const t = inside ? d.terrain[y * d.width + x] : -1;
+        const tex = !inside ? 'sea' : v2 ? v2Tile(t) : classicTile(t);
+        if (tex === 'sea') {
+          sea0.create(x * T, y * T);
+          sea1.create(x * T, y * T);
+        } else blit(tex, x, y);
+      }
+    }
+    this.time.addEvent({ delay: 700, loop: true, callback: () => { sea0.setVisible(!sea0.visible); sea1.setVisible(!sea1.visible); } });
+    for (const p of d.path) {
+      const t = d.terrain[p.y * d.width + p.x];
+      const onSea = v2 ? t === 0 : t === 3;
+      const tex = p.c === 'start' ? 'tiles/path_start' : p.c === 'branch' ? 'tiles/path_branch' : p.c === 'lastboss' ? 'tiles/path_lastboss'
+        : /^boss/.test(p.c) ? 'tiles/path_boss' : onSea ? 'tiles/bridge' : 'tiles/path';
+      blits[`p:${tex}`] ??= this.add.blitter(0, 0, `${tex}+`).setDepth(-1);
+      blits[`p:${tex}`].create(p.x * T - 1, p.y * T - 1);
+    }
+  }
+
+  /** y の小さい順に描く（下の物ほど手前） */
+  private depthOf(y: number, extra = 0) {
+    return y * 10 + extra;
+  }
+
+  private drawObjects() {
+    this.objSprites = this.map.data.objects.map((o) => {
+      const cx = o.x * T + T / 2;
+      const cy = o.y * T + T / 2;
+      let s: Phaser.GameObjects.Sprite | null = null;
+      if (NPC_OF[o.type]) s = this.add.sprite(cx, cy + CHR_OFFS_Y, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(HERO_SCALE);
+      else if (OBJ_OF[o.type]) s = this.add.sprite(cx, cy, OBJ_OF[o.type]).setScale(0.8);
+      else if (ENEMIES[o.type]) {
+        const e = ENEMIES[o.type];
+        s = this.add.sprite(cx, cy + CHR_OFFS_Y, e.sprite).setScale(e.boss ? 1.15 : HERO_SCALE).play(`${e.sprite}_idle`);
+        if (o.type === 'lastboss_king') s.setTint(0xff9090);
+      }
+      s?.setDepth(this.depthOf(o.y, 2));
+      return s;
+    });
+  }
+
+  private drawHeroes() {
+    this.heroes = this.view.players.map((p) => this.add.sprite(0, 0, HEROES[p.charId], DIR_ROW[p.dir] * 4).setScale(HERO_SCALE));
+    this.shadows = this.view.players.map(() => this.add.ellipse(0, 0, 22, 7, 0x000000, 0.35));
+    this.marks = this.view.players.map(() => []);
+    this.cursor = this.add.sprite(0, 0, 'fx/cursor').play('fx/cursor').setDepth(100000).setScale(0.6);
+    this.view.players.forEach((p) => this.placeHero(p.seat, p.x, p.y));
+  }
+
+  private placeHero(seat: number, x: number, y: number) {
+    const px = x * T + T / 2;
+    const py = y * T + T / 2;
+    this.heroes[seat].setPosition(px, py + CHR_OFFS_Y);
+    this.shadows[seat].setPosition(px, py + 8);
+    this.restack();
+  }
+
+  /** 手番キャラは同じマスでも一番手前 */
+  private restack() {
+    this.heroes.forEach((s, i) => {
+      const cy = Math.floor((s.y - CHR_OFFS_Y) / T);
+      s.setDepth(this.depthOf(cy, i === this.view.turn ? 6 : 4));
+      this.shadows[i].setDepth(this.depthOf(cy, 1)).setPosition(s.x, s.y - CHR_OFFS_Y + 8);
+    });
+    const cur = this.heroes[this.view.turn];
+    if (cur) this.cursor.setPosition(cur.x, cur.y - 30);
+  }
+
+  private faceHero(seat: number, dir: string, walk: boolean) {
+    const s = this.heroes[seat];
+    const key = HEROES[this.view.players[seat].charId];
+    if (walk) s.play(`${key}_${dir}`, true);
+    else {
+      s.stop();
+      s.setFrame(DIR_ROW[dir as keyof typeof DIR_ROW] * 4);
+    }
+  }
+
+  /** カメラは手番（イベント対象）キャラを中心に。対象が変わると画面を切り替える */
+  private lookAt(seat: number) {
+    const s = this.heroes[seat];
+    if (!s) return;
+    this.actor = seat;
+    const cam = this.cameras.main;
+    cam.stopFollow();
+    cam.startFollow(s, true, 1, 1, 0, -CHR_OFFS_Y);
+  }
+
+  /** ワールド座標 → フィールド領域内座標（0〜280） */
+  private toField(wx: number, wy: number) {
+    const v = this.cameras.main.worldView;
+    return { x: wx - v.x, y: wy - v.y };
+  }
+
+  // ───────── ウィンドウ（フィールド内部座標） ─────────
+
+  private clearWins() {
+    fieldUI().querySelectorAll('.askwin').forEach((e) => e.remove());
+  }
+
+  private addWin(el: HTMLElement) {
+    el.classList.add('askwin');
+    fieldUI().append(el);
+    return el;
+  }
+
+  private descWin: HTMLElement | null = null;
+  private showDesc(it: MenuItem | null) {
+    this.descWin?.remove();
+    this.descWin = null;
+    if (!it?.desc) return;
+    this.descWin = this.addWin(centerWin(140, 240, h('div', {}, it.label), h('div', { style: 'font-size:12px' }, it.desc)));
+  }
+
+  private gotWin(icon: number | null, text: string) {
+    const el = centerWin(140, 140, icon ? h('span', { style: `${iconStyle(icon)};vertical-align:middle;margin-right:6px` }) : null, text);
+    fieldUI().append(el);
+    this.time.delayedCall(frames(30), () => el.remove());
+  }
+
+  private refreshAsk(force = false) {
+    if (this.busy || this.queue.length) return;
+    const ask = this.host.ask;
+    const key = JSON.stringify(ask);
+    if (!force && key === this.shownAsk) return;
+    this.shownAsk = key;
+    this.clearWins();
+    this.showDesc(null);
+    if (this.host.kind === 'online' && (this.host as OnlineHost).proxied) {
+      this.addWin(menuWin([{ label: 'CPUが代行中', disabled: true }, { label: '操作に戻る', on: () => (this.host as OnlineHost).resume() }], 'left:16px;top:16px'));
+      return;
+    }
+    if (!ask || this.view.over) return;
+    // 問いかけはシステムメッセージとして流す
+    if (ask.kind === 'select' && this.streamedAsk !== key) system(ask.title);
+    this.streamedAsk = key;
+    if (!this.host.mySeats.has(ask.seat)) {
+      this.host.idle();
+      return;
+    }
+    closeLog(); // 手番が来たらログは自動で閉じる
+    const send = (inp: Parameters<Host['send']>[0]) => {
+      se('select');
+      this.clearWins();
+      this.showDesc(null);
+      this.host.send(inp);
+    };
+    const p = this.view.players[ask.seat];
+    if (ask.kind === 'action') {
+      this.lookAt(ask.seat);
+      this.addWin(menuWin([
+        { label: '移動', on: () => send({ type: 'roll' }) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+      ], 'left:16px;top:16px'));
+    } else if (ask.kind === 'battle') {
+      this.addWin(menuWin([
+        { label: 'たたかう', on: () => send({ type: 'battleAttack' }) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+      ], 'left:16px;top:200px'));
+    } else {
+      const win = this.addWin(menuWin(ask.options.map((o, i) => ({
+        label: o.label, disabled: o.disabled,
+        icon: o.value && ITEMS[o.value] ? iconStyle(o.value) : undefined,
+        desc: o.value && ITEMS[o.value] ? ITEMS[o.value].desc : undefined,
+        on: () => send({ type: 'select', index: i }),
+      })), 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+      // 問いかけ文は対象プレイヤーのウィンドウ先頭に表示（流さない）
+      win.prepend(h('div', { style: 'padding:0 11px;line-height:22px;color:#ffe650;white-space:normal;max-width:240px' }, ask.title));
+    }
+  }
+
+  private itemList(p: PublicPlayer, usable: number[], onUse: (slot: number) => void) {
+    this.clearWins();
+    const items: MenuItem[] = p.items.map((id, slot) => ({
+      label: ITEMS[id].name + (ITEMS[id].mp ? `（MP${ITEMS[id].mp}）` : ''),
+      icon: iconStyle(id), desc: ITEMS[id].desc, disabled: !usable.includes(slot), on: () => onUse(slot),
+    }));
+    items.push({ label: 'もどる', on: () => this.refreshAsk(true) });
+    this.addWin(menuWin(items, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+  }
+
+  private tickTimer() {
+    const ask = this.host.ask;
+    const dl = this.host.deadline;
+    const left = Math.ceil((dl - Date.now()) / 1000);
+    const show = !!ask && !!dl && this.host.mySeats.has(ask.seat) && !this.busy && left >= 0 && left <= this.host.settings.timeLimit - C.DRAW_LIMIT_TIME;
+    if (!show) {
+      this.timerWin?.remove();
+      this.timerWin = null;
+      return;
+    }
+    const y = this.battle.active ? 32 : 240;
+    const text = `あと${left}秒でターン終了`;
+    if (!this.timerWin) this.timerWin = fieldUI().appendChild(centerWin(140, y, text));
+    this.timerWin.textContent = text;
+    this.timerWin.style.top = `${y}px`;
+  }
+
+  // ───────── 演出 ─────────
+
+  private async pump() {
+    if (this.busy) return;
+    this.busy = true;
+    this.clearWins();
+    this.showDesc(null);
+    this.shownAsk = '';
+    while (this.queue.length) {
+      const b = this.queue.shift()!;
+      for (const e of b.events) {
+        try {
+          await this.play(e, b.view);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      this.applyView(b.view);
+      this.tracker.feed(b.events, b.view);
+    }
+    this.busy = false;
+    this.refreshAsk(true);
+  }
+
+  private applyView(v: PublicView) {
+    this.view = v;
+    v.players.forEach((p) => {
+      const s = this.heroes[p.seat];
+      if (!s) return;
+      this.placeHero(p.seat, p.x, p.y);
+      this.faceHero(p.seat, p.dir, false);
+      s.setAlpha(1).setAngle(0);
+      this.setMarks(p);
+    });
+    const removed = new Set(v.removed);
+    this.objSprites.forEach((s, i) => s?.setVisible(!removed.has(i)));
+    this.restack();
+    this.status.draw(v, v.turn);
+  }
+
+  private setMarks(p: PublicPlayer) {
+    const list = this.marks[p.seat];
+    list.forEach((m) => m.destroy());
+    list.length = 0;
+    const s = this.heroes[p.seat];
+    if (p.stun > 0) list.push(this.add.sprite(s.x, s.y - 22, 'fx/piyo').play('fx/piyo').setScale(0.5).setDepth(99999));
+    if (p.cursed) list.push(this.add.sprite(s.x + 10, s.y - 18, 'fx/curse').play('fx/curse').setScale(0.35).setDepth(99999));
+  }
+
+  private fxAt(name: string, wx: number, wy: number, scale = 0.7) {
+    if (!this.textures.exists(`fx/${name}`)) return;
+    const s = this.add.sprite(wx, wy, `fx/${name}`).setDepth(99998).setScale(scale).play(`fx/${name}`);
+    s.once('animationcomplete', () => s.destroy());
+  }
+
+  private popAt(seat: number, sheet: string, value: number) {
+    if (this.battle.active && seat === this.view.battle?.seat) {
+      this.overlay.pop(sheet, value, 200, 170);
+      return;
+    }
+    const s = this.heroes[seat];
+    if (!s) return;
+    const p = this.toField(s.x, s.y - 20);
+    this.overlay.pop(sheet, value, p.x, p.y);
+  }
+
+  private name(seat: number) {
+    return this.view.players[seat]?.name ?? '?';
+  }
+
+  private updateEnemyHp(hp: number, max: number) {
+    // 敵HP表示（UI_LAYOUT §6 / 図：左上(24,128) 100×16）
+    if (!this.hpWin) this.hpWin = fieldUI().appendChild(h('div', { class: 'win', style: 'left:24px;top:128px;width:100px;height:16px;font-size:11px;line-height:14px;padding:0 6px' }));
+    this.hpWin.textContent = `敵HP ${Math.max(0, hp)}/${max}`;
+  }
+
+  private async play(e: GameEvent, end: PublicView): Promise<void> {
+    const inBattle = this.battle.active;
+    switch (e.t) {
+      case 'turn':
+        this.view = { ...this.view, turn: e.seat, round: e.round };
+        this.restack();
+        this.status.draw(this.view, e.seat);
+        this.lookAt(e.seat);
+        if (this.host.mySeats.has(e.seat)) {
+          // 該当プレイヤーにはポップアップ。〇を押して閉じる
+          system(`${this.name(e.seat)}の番です`);
+          se('turn');
+          await this.turnPopup(`${this.name(e.seat)}の番です`);
+        } else {
+          // 対象外のプレイヤーにはコメントを流して通知
+          notify(`${this.name(e.seat)}の番です`);
+          await wait(this, frames(6));
+        }
+        return;
+      case 'skip':
+        se('piyo');
+        await wait(this, frames(16));
+        return;
+      case 'dice':
+        if (inBattle && (e.purpose === 'attack' || e.purpose === 'enemy')) await this.battle.attack(e.purpose === 'attack');
+        await this.overlay.roll(e.values, e.ichi);
+        return;
+      case 'move': {
+        const seat = e.seat;
+        const s = this.heroes[seat];
+        this.lookAt(seat);
+        this.cursor.setVisible(false);
+        let px = Math.floor(s.x / T);
+        let py = Math.floor((s.y - CHR_OFFS_Y) / T);
+        for (const c of e.cells) {
+          const dir = c.x > px ? 'right' : c.x < px ? 'left' : c.y > py ? 'down' : 'up';
+          this.faceHero(seat, dir, true);
+          // 1マス 5 フレームの直線補間
+          await tween(this, { targets: s, x: c.x * T + T / 2, y: c.y * T + T / 2 + CHR_OFFS_Y, duration: frames(5) });
+          this.shadows[seat].setPosition(s.x, s.y - CHR_OFFS_Y + 8);
+          s.setDepth(this.depthOf(c.y, 6));
+          se('step');
+          px = c.x;
+          py = c.y;
+          // 歩き終わるたびにそのマスの矢印方向へ向きを変える
+          const arrow = this.map.cell(c.x, c.y)?.c ?? '';
+          this.faceHero(seat, ARROWS.includes(arrow) ? arrow : dir, true);
+        }
+        s.stop();
+        this.faceHero(seat, end.players[seat]?.dir ?? 'down', false);
+        this.cursor.setVisible(true);
+        this.restack();
+        return;
+      }
+      case 'msg':
+        system(e.text);
+        await wait(this, frames(8));
+        return;
+      case 'damage':
+        se('damage');
+        this.popAt(e.seat, 'num/damage', e.amount);
+        if (!inBattle) this.cameras.main.shake(120, 0.01);
+        await wait(this, frames(8));
+        return;
+      case 'heal':
+        se('heal');
+        this.popAt(e.seat, 'num/heal', e.amount);
+        await wait(this, frames(8));
+        return;
+      case 'gold':
+        if (e.amount > 0) {
+          se('gold');
+          this.popAt(e.seat, 'num/gold', e.amount);
+          if (this.host.mySeats.has(e.seat)) this.gotWin(null, `${e.amount}G 手に入れた！`);
+        }
+        await wait(this, frames(6));
+        return;
+      case 'getItem':
+        se('get');
+        system(`${this.name(e.seat)}は${ITEMS[e.item].name}を手に入れた！`);
+        if (this.host.mySeats.has(e.seat)) this.gotWin(e.item, `${ITEMS[e.item].name}を手に入れた！`);
+        await wait(this, frames(10));
+        return;
+      case 'loseItem':
+        return;
+      case 'objRemove': {
+        const s = this.objSprites[e.idx];
+        if (s) this.tweens.add({ targets: s, alpha: 0, duration: frames(6), onComplete: () => s.setVisible(false).setAlpha(1) });
+        return;
+      }
+      case 'chestOpen':
+        this.objSprites[e.idx]?.setTexture('obj/chest_open');
+        await wait(this, frames(8));
+        return;
+      case 'fx': {
+        if (inBattle) return;
+        const s = e.seat !== undefined ? this.heroes[e.seat] : null;
+        const x = s ? s.x : (e.x ?? 0) * T + T / 2;
+        const y = s ? s.y : (e.y ?? 0) * T + T / 2;
+        if (e.name === 'explosion') se('explode');
+        if (e.name === 'warp') se('warp');
+        this.fxAt(e.name, x, y);
+        await wait(this, frames(10));
+        return;
+      }
+      case 'battleStart': {
+        const enemy = ENEMIES[e.enemy];
+        const hp = this.view.enemyHp[e.obj] ?? enemy.hp;
+        bgm(enemy.boss ? 'boss' : 'battle');
+        this.clearWins();
+        await this.overlay.encount();
+        this.view = { ...this.view, battle: { seat: e.seat, obj: e.obj, enemy: e.enemy, hp, maxHp: enemy.hp, phase2: false } };
+        this.battle.begin(e.enemy, hp, this.view.players[e.seat]);
+        this.updateEnemyHp(hp, enemy.hp);
+        return;
+      }
+      case 'battleHit':
+        if (e.fx !== 'hit') await this.battle.magic(e.fx);
+        if (e.target === 'enemy') {
+          this.battle.hp -= e.amount;
+          this.updateEnemyHp(this.battle.hp, this.battle.maxHp);
+          this.overlay.pop('num/damage', e.amount, 80, 50);
+          se('hit');
+          await wait(this, frames(12));
+        }
+        return;
+      case 'phase2':
+        await this.battle.phase2();
+        return;
+      case 'battleEnd':
+        await this.battle.end(e.result);
+        this.hpWin?.remove();
+        this.hpWin = null;
+        this.view = { ...this.view, battle: null };
+        bgm('field');
+        return;
+      case 'death':
+        se('lose');
+        if (!inBattle) await tween(this, { targets: this.heroes[e.seat], alpha: 0.2, angle: 90, duration: frames(12) });
+        return;
+      case 'revive':
+        this.fxAt('heal', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(10));
+        return;
+      case 'respawn': {
+        const r = end.players[e.seat]?.respawn;
+        if (r) {
+          this.placeHero(e.seat, r.x, r.y);
+          this.heroes[e.seat].setAlpha(1).setAngle(0);
+          se('warp');
+          this.lookAt(e.seat);
+          this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        }
+        await wait(this, frames(10));
+        return;
+      }
+      case 'warp': {
+        const p = end.players[e.seat];
+        se('warp');
+        this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(10));
+        if (p) this.placeHero(e.seat, p.x, p.y);
+        this.lookAt(e.seat);
+        this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(10));
+        return;
+      }
+      case 'swap': {
+        const a = this.heroes[e.a];
+        const b = this.heroes[e.b];
+        se('swap');
+        this.lookAt(e.a);
+        this.fxAt('swap', a.x, a.y);
+        await wait(this, frames(12));
+        const ax = a.x;
+        const ay = a.y;
+        a.setPosition(b.x, b.y);
+        b.setPosition(ax, ay);
+        this.restack();
+        this.lookAt(e.a);
+        this.fxAt('swap', a.x, a.y);
+        await wait(this, frames(12));
+        return;
+      }
+      case 'paru':
+        this.lookAt(e.seat);
+        await this.overlay.paru(e.kiwami);
+        return;
+      case 'stun':
+        se('piyo');
+        this.lookAt(e.seat);
+        this.fxAt('piyo', this.heroes[e.seat].x, this.heroes[e.seat].y - 20);
+        await wait(this, frames(10));
+        return;
+      case 'curse':
+        se('curse');
+        this.fxAt('curse', this.heroes[e.seat].x, this.heroes[e.seat].y);
+        await wait(this, frames(8));
+        return;
+      case 'gameOver':
+        bgm('win');
+        se('win');
+        this.tracker.gameOver(e.winner, this.host.kind !== 'replay' && !this.host.spectator);
+        if (this.host.tutorial) {
+          unlock('tutorial');
+          update((s) => (s.tutorialDone = true));
+        }
+        this.applyView(end);
+        this.result(e.winner);
+        return;
+    }
+  }
+
+  /** 手番ポップアップ：〇を押すまで待つ */
+  private turnPopup(text: string): Promise<void> {
+    return new Promise((resolve) => {
+      const close = () => {
+        el.remove();
+        resolve();
+      };
+      const el = centerWin(140, 140,
+        h('div', { style: 'font-size:16px;margin-bottom:6px;text-align:center' }, text),
+        h('div', { style: 'text-align:center' }, h('button', {
+          class: 'okbtn', onclick: () => { se('select'); close(); },
+        }, '〇')));
+      el.classList.add('turnpop');
+      fieldUI().append(el);
+    });
+  }
+
+  /** 結果（UI_LAYOUT §5）：閉じるとゲーム終了 */
+  private result(winner: number) {
+    const close = () => {
+      if (this.host.kind === 'online') net.leave();
+      this.scene.start('Menu');
+    };
+    const items: MenuItem[] = [{ label: '閉じる', on: close }];
+    if (this.host.kind === 'online') items.unshift({ label: 'リマッチ', on: () => net.send('rematch') });
+    items.unshift({
+      label: 'リプレイ保存', on: async () => {
+        const d = await this.host.replayData();
+        if (d) h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })), download: `beefhunter_replay_${Date.now()}.json` }).click();
+      },
+    });
+    $('overlay').append(h('div', { class: 'win', style: 'left:50%;top:40%;transform:translate(-50%,-50%);padding:10px 14px;text-align:center' },
+      h('div', { style: 'font-size:16px' }, `優勝者は ${this.name(winner)} さんです！`),
+      h('div', { style: 'font-size:12px;margin:4px 0' }, 'このウィンドウを閉じるとゲームを終了します'),
+      menuWin(items, 'position:static;border:0')));
+  }
+}
