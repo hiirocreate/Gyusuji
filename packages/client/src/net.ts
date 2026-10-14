@@ -180,7 +180,7 @@ export class Net {
   }
 
   async slots(): Promise<{ slot: number; players: number; phase: string; roomId: string | null }[]> {
-    const r = await fetch(`${httpBase()}/slots`);
+    const r = await fetch(`${httpBase()}/slots`, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error('サーバに接続できません');
     return r.json();
   }

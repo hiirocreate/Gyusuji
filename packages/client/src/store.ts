@@ -26,7 +26,7 @@ export interface Store {
 const defaults = (): Store => ({
   name: '',
   speed: 1,
-  serverUrl: (import.meta.env.VITE_SERVER_URL as string | undefined) || `ws://${location.hostname || 'localhost'}:2567`,
+  serverUrl: defaultServer(),
   friendCode: String(Math.floor(10000000 + Math.random() * 89999999)),
   friends: [],
   stats: { games: 0, wins: 0, lastBossKills: 0, casinoStreak: 0 },
@@ -36,6 +36,22 @@ const defaults = (): Store => ({
   sound: true,
   stream: 'all',
 });
+
+/** 本番サーバ（Render）。ビルド変数 VITE_SERVER_URL があればそちらを優先 */
+export const PROD_SERVER = 'wss://beefhunter-server.onrender.com';
+
+/** https:// を wss://、http:// を ws:// に直す（どちらで入力されても接続できるように） */
+export function normalizeServer(u: string): string {
+  return u.trim().replace(/^https:/, 'wss:').replace(/^http:/, 'ws:').replace(/\/$/, '');
+}
+
+function defaultServer(): string {
+  const env = import.meta.env.VITE_SERVER_URL as string | undefined;
+  if (env) return normalizeServer(env);
+  // 開発時（localhost）はローカルサーバ、公開版・アプリは本番サーバ
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname) && location.protocol === 'http:';
+  return local ? `ws://${location.hostname}:2567` : PROD_SERVER;
+}
 
 let cache: Store | null = null;
 
@@ -48,6 +64,9 @@ export function store(): Store {
     saved = {};
   }
   cache = { ...defaults(), ...saved, stats: { ...defaults().stats, ...(saved.stats ?? {}) } };
+  cache.serverUrl = normalizeServer(cache.serverUrl);
+  // https のページからは ws:// に接続できないため、古い保存値は本番サーバに置き換える
+  if (location.protocol === 'https:' && cache.serverUrl.startsWith('ws://')) cache.serverUrl = defaultServer();
   save();
   return cache;
 }

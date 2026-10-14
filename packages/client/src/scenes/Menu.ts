@@ -73,11 +73,22 @@ export class Menu extends Phaser.Scene {
 
   async rooms() {
     this.show(h('div', {}, '部屋を選んでください'), h('div', { class: 'muted' }, '読み込み中…'));
-    let slots: Awaited<ReturnType<typeof net.slots>>;
-    try {
-      slots = await net.slots();
-    } catch (e) {
-      this.show(h('div', {}, (e as Error).message), this.list([{ label: 'もどる', on: () => this.title() }]));
+    let slots: Awaited<ReturnType<typeof net.slots>> | null = null;
+    // 無料サーバは15分使われないと眠るため、起動まで最大約90秒待つ
+    let cancelled = false;
+    for (let i = 0; i < 18 && !slots && !cancelled; i++) {
+      try {
+        slots = await net.slots();
+      } catch {
+        if (!this.scene.isActive('Menu')) return;
+        this.show(h('div', {}, 'サーバを起動しています…'), h('div', { class: 'muted' }, `しばらくお待ちください（${(i + 1) * 5}秒）`),
+          this.list([{ label: 'もどる', on: () => { cancelled = true; this.title(); } }]));
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
+    if (cancelled) return;
+    if (!slots) {
+      if (this.scene.isActive('Menu')) this.show(h('div', {}, 'サーバに接続できませんでした'), this.list([{ label: '再試行', on: () => this.rooms() }, { label: 'もどる', on: () => this.title() }]));
       return;
     }
     const items: MenuItem[] = slots.map((r) => {
