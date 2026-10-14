@@ -1,0 +1,376 @@
+{
+ "fx/explosion": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/hit": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 6
+ },
+ "fx/heal": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/fire": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/summon_circle": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 8
+ },
+ "fx/piyo": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/curse": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/cursor": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 8
+ },
+ "fx/gold": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/paru": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 10
+ },
+ "fx/paru_kiwami": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 10
+ },
+ "fx/swap": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/absorb": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/warp": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 8
+ },
+ "fx/encount": {
+  "frame": [
+   128,
+   128
+  ],
+  "frames": 6
+ },
+ "fx/summon_seed": {
+  "frame": [
+   128,
+   128
+  ],
+  "frames": 1
+ },
+ "dice/faces": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 6,
+  "note": "左から1〜6"
+ },
+ "dice/roll": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 8
+ },
+ "dice/ichi": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 2
+ },
+ "num/damage": {
+  "frame": [
+   22,
+   30
+  ],
+  "frames": 10,
+  "note": "0〜9"
+ },
+ "num/heal": {
+  "frame": [
+   22,
+   30
+  ],
+  "frames": 10,
+  "note": "0〜9"
+ },
+ "num/gold": {
+  "frame": [
+   22,
+   30
+  ],
+  "frames": 10,
+  "note": "0〜9"
+ },
+ "items/icons": {
+  "frame": [
+   32,
+   32
+  ],
+  "frames": 25,
+  "order": [
+   "apple",
+   "elixir",
+   "amulet",
+   "dice",
+   "ichi",
+   "dagger",
+   "iron_sword",
+   "hero_sword",
+   "wood_shield",
+   "iron_shield",
+   "hero_shield",
+   "run_shoes",
+   "safe_shoes",
+   "mag_heal",
+   "mag_fire",
+   "mag_luck",
+   "mag_summon",
+   "sword_orb",
+   "paru",
+   "piyo",
+   "absorb",
+   "curse",
+   "dragon_mail",
+   "warp_scroll",
+   "dummy_doll"
+  ],
+  "note": "アイテムNo1〜25の順"
+ },
+ "obj/chest": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 1
+ },
+ "obj/chest_open": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 1
+ },
+ "obj/qbox": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 1
+ },
+ "obj/tack": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 1
+ },
+ "obj/tack_big": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 1
+ },
+ "obj/gold_small": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 1
+ },
+ "obj/gold_large": {
+  "frame": [
+   48,
+   48
+  ],
+  "frames": 1
+ },
+ "npc/priest": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 4,
+  "note": "下・左・右・上（マップのdirに対応）"
+ },
+ "npc/merchant": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 4,
+  "note": "下・左・右・上（マップのdirに対応）"
+ },
+ "npc/inn": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 4,
+  "note": "下・左・右・上（マップのdirに対応）"
+ },
+ "npc/shoesage": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 4,
+  "note": "下・左・右・上（マップのdirに対応）"
+ },
+ "npc/smith": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 4,
+  "note": "下・左・右・上（マップのdirに対応）"
+ },
+ "npc/dealer": {
+  "frame": [
+   64,
+   64
+  ],
+  "frames": 4,
+  "note": "下・左・右・上（マップのdirに対応）"
+ },
+ "tiles/grass": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/sand": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/sea_0": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/sea_1": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/forest": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/mountain": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/path": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/path_start": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/path_branch": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/path_boss": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/path_lastboss": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ },
+ "tiles/bridge": {
+  "frame": [
+   40,
+   40
+  ],
+  "frames": 1
+ }
+}
