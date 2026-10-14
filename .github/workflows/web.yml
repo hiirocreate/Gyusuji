@@ -1,4 +1,5 @@
 name: web
+# ダッシュボードの Git 連携（Workers Builds）を使う場合、このワークフローは Secrets 未設定のため自動でスキップされる
 on:
   push: { branches: [main, 'claude/**'] }
   workflow_dispatch: {}
@@ -27,13 +28,10 @@ jobs:
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Create Pages project (初回のみ)
-        if: steps.cf.outputs.ok == 'true'
-        run: npx wrangler@4 pages project create beef-hunter --production-branch=main || true
       - uses: cloudflare/wrangler-action@v4
         if: steps.cf.outputs.ok == 'true'
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy packages/client/dist --project-name=beef-hunter --branch=${{ github.ref_name }}
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          # main は本番、その他のブランチはプレビュー版として上げる
+          command: ${{ github.ref_name == 'main' && 'deploy' || 'versions upload' }}
