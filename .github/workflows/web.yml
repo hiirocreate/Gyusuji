@@ -1,8 +1,13 @@
 name: web
-on: { push: { branches: [main] }, workflow_dispatch: {} }
+on:
+  push: { branches: [main, 'claude/**'] }
+  workflow_dispatch: {}
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -10,8 +15,15 @@ jobs:
       - run: npm ci
       - run: npm run build -w packages/client
         env: { VITE_SERVER_URL: "${{ secrets.SERVER_URL }}" }
+      - name: Check secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定です"; exit 1
+          fi
+      - name: Create Pages project (初回のみ)
+        run: npx wrangler@3 pages project create beef-hunter --production-branch=main || true
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy packages/client/dist --project-name=beef-hunter
+          command: pages deploy packages/client/dist --project-name=beef-hunter --branch=${{ github.ref_name }}

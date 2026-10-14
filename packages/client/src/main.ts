@@ -31,3 +31,9 @@ onLayout((l) => game.scale.resize(l.w, l.h));
 
 // E2E・確認用：任意の送信者のメッセージを流す
 (window as unknown as { __say: (from: string, text: string, color: string) => void }).__say = (from, text, color) => say({ from, text, color, system: false });
+
+// PWA：Service Worker（Capacitor 内では登録しない）
+const isNative = !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+if ('serviceWorker' in navigator && !isNative && location.protocol === 'https:') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}

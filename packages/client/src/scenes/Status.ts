@@ -43,13 +43,14 @@ export class Status extends Phaser.Scene {
       this.layer.add(this.add.bitmapText(x + 124, y + 18, 'stat', String(Math.min(999, p.steps)).padStart(3, ' ')));
       this.layer.add(this.add.bitmapText(x + 52, y + 36, 'stat', `H ${String(p.hp).padStart(2, ' ')} / M ${String(p.mp).padStart(2, ' ')}`));
       this.layer.add(this.add.bitmapText(x + 106, y + 56, 'stat', `${String(p.gold).padStart(3, ' ')}G`));
+      // アイテム欄：参考図に合わせ (10,82) から枠30×26・ピッチ32×28（所持金の数字と重ならない）
       const box = this.add.graphics().lineStyle(1, 0x606060, 1);
       for (let k = 0; k < 10; k++) {
         const ix = x + 10 + (k % 5) * 32;
-        const iy = y + 66 + Math.floor(k / 5) * 32;
-        box.strokeRect(ix + 0.5, iy + 0.5, 31, 31);
+        const iy = y + 82 + Math.floor(k / 5) * 28;
+        box.strokeRect(ix + 0.5, iy + 0.5, 29, 25);
         const id = p.items[k];
-        if (id) this.layer.add(this.add.image(ix, iy, 'items/icons', id - 1).setOrigin(0));
+        if (id) this.layer.add(this.add.image(ix + 15, iy + 13, 'items/icons', id - 1).setDisplaySize(26, 26));
       }
       this.layer.add(box);
     }
