@@ -21,17 +21,25 @@ export function setSender(f: ((text: string, color: number) => void) | null): vo
   sender = f;
 }
 
-export function say(l: Line): void {
+/** ログに残し、flow=true なら画面に流す */
+export function say(l: Line, flow = !l.system): void {
   lines.push(l);
   if (lines.length > LOG_MAX) lines.shift();
   logWin?.append(l);
+  if (!flow) return;
   const mode = store().stream;
   if (mode === 'none' || (mode === 'system' && !l.system)) return;
   stream.push(l);
 }
 
+/** システムメッセージ：画面には流さず、ログにだけ残す */
 export function system(text: string): void {
-  say({ from: SYS, text, color: SYSTEM_COLOR, system: true });
+  say({ from: SYS, text, color: SYSTEM_COLOR, system: true }, false);
+}
+
+/** 対象外のプレイヤーへの通知（手番など）：ログに残して画面に流す */
+export function notify(text: string): void {
+  say({ from: SYS, text, color: SYSTEM_COLOR, system: true }, true);
 }
 
 const fmt = (l: Line) => (l.system ? `${SYS} ${l.text}` : `${l.from}: ${l.text}`);

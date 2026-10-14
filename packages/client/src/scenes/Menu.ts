@@ -91,8 +91,7 @@ export class Menu extends Phaser.Scene {
             await net.joinSlot(r.slot);
             this.chars();
           } catch (e) {
-            say({ from: '', text: (e as Error).message, color: '#ffe650', system: true });
-            this.rooms();
+            this.show(h('div', {}, (e as Error).message), this.list([{ label: 'もどる', on: () => this.rooms() }]));
           }
         },
       };
@@ -182,7 +181,7 @@ export class Menu extends Phaser.Scene {
 
   private options() {
     const s = store();
-    const streamLabel = { all: '表示する', system: 'システムのみ', none: '表示しない' }[s.stream];
+    const streamLabel = { all: '表示する', system: '通知のみ', none: '表示しない' }[s.stream];
     this.show(h('div', {}, '設定'), this.list([
       { label: `演出速度：${s.speed}×`, on: () => { update((x) => (x.speed = ((x.speed % 3) + 1) as 1 | 2 | 3)); this.options(); } },
       { label: `流れるメッセージ：${streamLabel}`, on: () => { update((x) => (x.stream = x.stream === 'all' ? 'system' : x.stream === 'system' ? 'none' : 'all')); this.options(); } },

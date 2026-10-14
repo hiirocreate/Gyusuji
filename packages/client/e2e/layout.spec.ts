@@ -1,4 +1,19 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/** 自分の「移動」メニューが出るまで進める（手番ポップアップ・戦闘・選択肢を処理） */
+async function untilMyAction(page: Page) {
+  for (let i = 0; i < 120; i++) {
+    if (await page.locator('.askwin .it', { hasText: '移動' }).isVisible()) return;
+    const ok = page.locator('.okbtn');
+    const atk = page.locator('.askwin .it', { hasText: 'たたかう' });
+    const opt = page.locator('.askwin .it:not(.off)').last();
+    if (await ok.isVisible()) await ok.click().catch(() => {});
+    else if (await atk.isVisible()) await atk.click().catch(() => {});
+    else if (await opt.isVisible()) await opt.click().catch(() => {});
+    await page.waitForTimeout(400);
+  }
+  throw new Error('自分の手番になりません');
+}
 
 /** UI_LAYOUT §12 の 1〜2：横(640×324)・縦(360×684) のスクリーンショット */
 const SIZES = { land: { width: 640, height: 324 }, port: { width: 360, height: 684 } } as const;
@@ -20,6 +35,10 @@ for (const orient of ['land', 'port'] as const) {
       await page.locator('.it', { hasText: '召喚士' }).click();
       await page.screenshot({ path: `e2e-out/${orient}_0wait.png` });
       await page.getByText('ゲーム開始').click();
+      await expect(page.locator('.okbtn')).toBeVisible({ timeout: 15000 });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `e2e-out/${orient}_1turnpop.png` });
+      await page.locator('.okbtn').click();
       await expect(page.getByText('移動')).toBeVisible({ timeout: 15000 });
       await page.waitForTimeout(300);
       await page.screenshot({ path: `e2e-out/${orient}_1field.png` });
@@ -69,13 +88,7 @@ for (const orient of ['land', 'port'] as const) {
       await page.locator('.askwin .it', { hasText: '移動' }).click();
       await page.waitForTimeout(1200);
       await page.screenshot({ path: `e2e-out/${orient}_4dice.png` });
-      // イベント（選択肢が出れば選ぶ）までCPUの手番を進める
-      for (let i = 0; i < 60; i++) {
-        const opt = page.locator('.askwin .it:not(.off)').last();
-        if (await page.locator('.askwin .it', { hasText: '移動' }).isVisible()) break;
-        if (await opt.isVisible()) await opt.click();
-        await page.waitForTimeout(500);
-      }
+      await untilMyAction(page);
       // イベント：宝箱の1マス手前に置き、いちころで1マス進む
       await page.evaluate(() => {
         const f = (window as any).game.scene.getScene('Field');
@@ -104,12 +117,7 @@ for (const orient of ['land', 'port'] as const) {
       await page.waitForTimeout(400);
       await page.screenshot({ path: `e2e-out/${orient}_5event.png` });
       await page.locator('.askwin .it', { hasText: '開ける' }).click();
-      for (let i = 0; i < 60; i++) {
-        if (await page.locator('.askwin .it', { hasText: '移動' }).isVisible()) break;
-        const opt = page.locator('.askwin .it:not(.off)').last();
-        if (await opt.isVisible()) await opt.click();
-        await page.waitForTimeout(500);
-      }
+      await untilMyAction(page);
       // 戦闘：中ボス手前のマスへ置いてから移動
       await page.evaluate(() => {
         const f = (window as any).game.scene.getScene('Field');

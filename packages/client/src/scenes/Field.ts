@@ -4,7 +4,7 @@ import type { Ask, GameEvent, PublicPlayer, PublicView } from '@gyusuji/shared';
 import { Tracker, unlock } from '../achievements.js';
 import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, classicTile, iconStyle, v2Tile } from '../assets.js';
 import { bgm, se } from '../audio.js';
-import { buildChatBar, closeLog, say, setSender, system } from '../chat.js';
+import { buildChatBar, closeLog, notify, say, setSender, system } from '../chat.js';
 import { onLayout } from '../layout.js';
 import { net, type Host, type OnlineHost } from '../net.js';
 import { update } from '../store.js';
@@ -17,7 +17,8 @@ import { fieldCam, frames, tween, wait } from './fieldcam.js';
 const T = C.TILE;
 /** キャラの描画位置はマス中心から上へ10px（SQU_CHR_OFFS_Y） */
 const CHR_OFFS_Y = -10;
-const HERO_SCALE = 0.75;
+/** キャラは少し寄りで表示（素材64px → 約58px） */
+const HERO_SCALE = 0.9;
 type Batch = { events: GameEvent[]; view: PublicView };
 const ARROWS = ['up', 'down', 'left', 'right'];
 
@@ -153,7 +154,7 @@ export class Field extends Phaser.Scene {
       else if (OBJ_OF[o.type]) s = this.add.sprite(cx, cy, OBJ_OF[o.type]).setScale(0.8);
       else if (ENEMIES[o.type]) {
         const e = ENEMIES[o.type];
-        s = this.add.sprite(cx, cy + CHR_OFFS_Y, e.sprite).setScale(e.boss ? 1 : HERO_SCALE).play(`${e.sprite}_idle`);
+        s = this.add.sprite(cx, cy + CHR_OFFS_Y, e.sprite).setScale(e.boss ? 1.15 : HERO_SCALE).play(`${e.sprite}_idle`);
         if (o.type === 'lastboss_king') s.setTint(0xff9090);
       }
       s?.setDepth(this.depthOf(o.y, 2));
@@ -280,12 +281,14 @@ export class Field extends Phaser.Scene {
         { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
       ], 'left:16px;top:200px'));
     } else {
-      this.addWin(menuWin(ask.options.map((o, i) => ({
+      const win = this.addWin(menuWin(ask.options.map((o, i) => ({
         label: o.label, disabled: o.disabled,
         icon: o.value && ITEMS[o.value] ? iconStyle(o.value) : undefined,
         desc: o.value && ITEMS[o.value] ? ITEMS[o.value].desc : undefined,
         on: () => send({ type: 'select', index: i }),
       })), 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+      // 問いかけ文は対象プレイヤーのウィンドウ先頭に表示（流さない）
+      win.prepend(h('div', { style: 'padding:0 11px;line-height:22px;color:#ffe650;white-space:normal;max-width:240px' }, ask.title));
     }
   }
 
@@ -400,9 +403,16 @@ export class Field extends Phaser.Scene {
         this.restack();
         this.status.draw(this.view, e.seat);
         this.lookAt(e.seat);
-        if (this.host.mySeats.has(e.seat)) se('turn');
-        system(`${this.name(e.seat)}の番です`);
-        await wait(this, frames(6));
+        if (this.host.mySeats.has(e.seat)) {
+          // 該当プレイヤーにはポップアップ。〇を押して閉じる
+          system(`${this.name(e.seat)}の番です`);
+          se('turn');
+          await this.turnPopup(`${this.name(e.seat)}の番です`);
+        } else {
+          // 対象外のプレイヤーにはコメントを流して通知
+          notify(`${this.name(e.seat)}の番です`);
+          await wait(this, frames(6));
+        }
         return;
       case 'skip':
         se('piyo');
@@ -596,6 +606,23 @@ export class Field extends Phaser.Scene {
         this.result(e.winner);
         return;
     }
+  }
+
+  /** 手番ポップアップ：〇を押すまで待つ */
+  private turnPopup(text: string): Promise<void> {
+    return new Promise((resolve) => {
+      const close = () => {
+        el.remove();
+        resolve();
+      };
+      const el = centerWin(140, 140,
+        h('div', { style: 'font-size:16px;margin-bottom:6px;text-align:center' }, text),
+        h('div', { style: 'text-align:center' }, h('button', {
+          class: 'okbtn', onclick: () => { se('select'); close(); },
+        }, '〇')));
+      el.classList.add('turnpop');
+      fieldUI().append(el);
+    });
   }
 
   /** 結果（UI_LAYOUT §5）：閉じるとゲーム終了 */
