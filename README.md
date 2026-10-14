@@ -35,6 +35,17 @@ cd android && ./gradlew assembleRelease
 GitHub Actions（`.github/workflows/android.yml`）で `main` への push ごとに `app-release.apk` を Artifacts と Releases に出力します。
 Secrets：`SERVER_URL`（例 `wss://xxx.onrender.com`）、`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`。キーストア未設定時はデバッグ署名で出力します。
 
+## Web版（Cloudflare Workers）
+
+Cloudflare の Git 連携（Workers Builds）で公開する。設定は `wrangler.jsonc`。
+
+| 項目 | 値 |
+|---|---|
+| Git branch | `claude/lucid-mccarthy-1oditg`（`main` 反映後は `main`） |
+| Build command | `npm run build -w packages/client` |
+| Deploy command | `npx wrangler deploy` |
+| Build variables | `VITE_SERVER_URL`＝`wss://...`（サーバURL） |
+
 ## サーバ設置
 
 Render（`render.yaml`）にそのままデプロイできます。`RENDER_DEPLOY_HOOK` を設定すると `server.yml` がテスト通過後にデプロイします。
