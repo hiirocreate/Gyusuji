@@ -1,3 +1,5 @@
+import { store, update } from './store.js';
+
 /** 画面構成（UI_LAYOUT.md §1）。論理キャンバスを縦横比を保って拡大縮小し、余白は黒帯 */
 export type Orient = 'land' | 'port';
 
@@ -21,7 +23,7 @@ export const LAYOUTS: Record<Orient, Layout> = {
     orient: 'land', w: 640, h: 324,
     field: { x: 0, y: 0, size: 280, scale: 1 },
     status: { x: 280, y: 0, w: 360, h: 280 },
-    chat: { x: 0, y: 280, w: 640, h: 44, input: 466 },
+    chat: { x: 0, y: 280, w: 640, h: 44, input: 428 },
     stream: { w: 640, h: 280, lanes: 6 },
     log: { x: 40, y: 20, w: 560, h: 250 },
   },
@@ -29,7 +31,7 @@ export const LAYOUTS: Record<Orient, Layout> = {
     orient: 'port', w: 360, h: 684,
     field: { x: 0, y: 0, size: 360, scale: 360 / 280 },
     status: { x: 0, y: 360, w: 360, h: 280 },
-    chat: { x: 0, y: 640, w: 360, h: 44, input: 186 },
+    chat: { x: 0, y: 640, w: 360, h: 44, input: 148 },
     stream: { w: 360, h: 640, lanes: 10 },
     log: { x: 10, y: 60, w: 340, h: 520 },
   },
@@ -41,10 +43,22 @@ const listeners = new Set<(l: Layout) => void>();
 export const layout = () => cur;
 
 /** 横幅 > 縦幅 なら横画面（URL の ?orient=land|port で固定可：確認用） */
+/** 画面の向き：既定は縦。切り替えボタンで変更し、端末に保存（URL の ?orient=land|port は確認用） */
 function detect(): Orient {
   const q = new URLSearchParams(location.search).get('orient');
   if (q === 'land' || q === 'port') return q;
-  return window.innerWidth > window.innerHeight ? 'land' : 'port';
+  return store().orient;
+}
+
+/** 縦⇔横を切り替える（ゲーム・通信は止めずにレイアウトだけ切り替え） */
+export function toggleOrient(): void {
+  update((s) => (s.orient = s.orient === 'port' ? 'land' : 'port'));
+  const u = new URL(location.href);
+  if (u.searchParams.has('orient')) {
+    u.searchParams.delete('orient');
+    history.replaceState(null, '', u);
+  }
+  applyLayout();
 }
 
 function safeInsets() {

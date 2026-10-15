@@ -1,5 +1,5 @@
 import { CHAT_COLORS, CHAT_MAX, SYSTEM_COLOR } from '@gyusuji/shared';
-import { layout, onLayout } from './layout.js';
+import { layout, onLayout, toggleOrient } from './layout.js';
 import { store, update } from './store.js';
 import { h } from './ui.js';
 
@@ -154,8 +154,9 @@ export function buildChatBar(): void {
     else say({ from: store().name || 'ななし', text: t, color: CHAT_COLORS[store().chatColor], system: false });
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+  const rot = h('button', { class: 'color', title: '縦横切り替え', style: 'background:#333', onclick: () => toggleOrient() }, layout().orient === 'port' ? '横' : '縦');
   bar.replaceChildren(
-    colorBtn, input,
+    colorBtn, rot, input,
     h('button', { class: 'cbtn', style: 'background:#5050c8', onclick: send }, '送信'),
     h('button', { class: 'cbtn', style: 'background:#555', onclick: () => toggleLog() }, 'ログ'));
 }

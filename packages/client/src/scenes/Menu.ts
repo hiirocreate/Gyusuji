@@ -7,6 +7,7 @@ import { buildChatBar, say, setSender } from '../chat.js';
 import { settingsForm } from '../forms.js';
 import { LocalHost, ReplayHost, net, type ReplayData } from '../net.js';
 import { store, update } from '../store.js';
+import { toggleOrient } from '../layout.js';
 import { $, h, menuWin, screenEl, type MenuItem } from '../ui.js';
 import { TitleBackdrop } from './titlebg.js';
 
@@ -65,6 +66,7 @@ export class Menu extends Phaser.Scene {
       menuWin([
         { label: '一人で遊ぶ', on: () => { this.mode = 'solo'; this.name(); } },
         { label: 'ネット対戦をする', on: () => { this.mode = 'net'; this.name(); } },
+        { label: `画面：${store().orient === 'port' ? '縦' : '横'}（タップで切り替え）`, on: () => { toggleOrient(); this.title(); } },
         { label: '設定', on: () => this.options() },
         { label: '戦績・実績', on: () => this.records() },
         { label: 'リプレイ再生', on: () => this.loadReplay() },

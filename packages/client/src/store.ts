@@ -21,6 +21,8 @@ export interface Store {
   sound: boolean;
   /** 流れるメッセージ：表示する／システムのみ／表示しない */
   stream: 'all' | 'system' | 'none';
+  /** 画面の向き（既定：縦） */
+  orient: 'port' | 'land';
 }
 
 const defaults = (): Store => ({
@@ -35,6 +37,7 @@ const defaults = (): Store => ({
   chatColor: 0,
   sound: true,
   stream: 'all',
+  orient: 'port',
 });
 
 /** 本番サーバ（Render）。ビルド変数 VITE_SERVER_URL があればそちらを優先 */
