@@ -8,6 +8,7 @@ async function open(browser: Browser, name: string, ua: string, vp: { width: num
   const p = await ctx.newPage();
   await p.addInitScript((n) => localStorage.setItem('beefhunter.v1', JSON.stringify({ name: n, speed: 3, sound: false, serverUrl: 'ws://localhost:2567' })), name);
   await p.goto('/');
+  await p.locator('.press').click();
   await p.getByText('ネット対戦をする').click();
   await p.getByText('決定').click();
   return p;

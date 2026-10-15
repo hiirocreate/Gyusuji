@@ -1,0 +1,37 @@
+name: cf-subdomain
+# Cloudflare の workers.dev サブドメイン（<Worker名>.<ここ>.workers.dev の「ここ」）を変更する
+# GitHub → Actions → cf-subdomain → Run workflow で新しい名前を入力して実行
+on:
+  workflow_dispatch:
+    inputs:
+      subdomain:
+        description: '新しいサブドメイン（英数字とハイフン。例 beefhunter）'
+        required: true
+jobs:
+  change:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 入力チェック
+        env: { SUB: "${{ inputs.subdomain }}" }
+        run: |
+          if ! echo "$SUB" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'; then
+            echo "::error::使えない名前です（小文字英数字とハイフン、先頭末尾のハイフン不可）"; exit 1
+          fi
+      - name: 現在のサブドメイン
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          curl -sS "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain" -H "Authorization: Bearer $TOKEN"
+      - name: サブドメインを変更
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SUB: ${{ inputs.subdomain }}
+        run: |
+          res=$(curl -sS -X PUT "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d "{\"subdomain\":\"$SUB\"}")
+          echo "$res"
+          echo "$res" | grep -q '"success":true' || { echo "::error::変更に失敗しました（上の errors を確認）"; exit 1; }
+          echo "::notice::新しいURL: https://gyusuji.$SUB.workers.dev"

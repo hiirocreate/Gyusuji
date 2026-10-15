@@ -27,8 +27,11 @@ for (const orient of ['land', 'port'] as const) {
       page.on('pageerror', (e) => errors.push(String(e)));
       await page.addInitScript(() => localStorage.setItem('beefhunter.v1', JSON.stringify({ name: 'てすと', speed: 1, sound: false })));
       await page.goto(`/?orient=${orient}`);
-      await page.waitForSelector('.ttl');
+      await page.waitForSelector('.press');
+      await page.waitForTimeout(1500);
       await page.screenshot({ path: `e2e-out/${orient}_title.png` });
+      await page.locator('.press').click();
+      await page.screenshot({ path: `e2e-out/${orient}_title_menu.png` });
       await page.getByText('一人で遊ぶ').click();
       await page.getByText('決定').click();
       await page.screenshot({ path: `e2e-out/${orient}_0chars.png` });
