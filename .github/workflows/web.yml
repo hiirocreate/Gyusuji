@@ -1,7 +1,7 @@
 name: web
 # ダッシュボードの Git 連携（Workers Builds）を使う場合、このワークフローは Secrets 未設定のため自動でスキップされる
+# 自動公開は Cloudflare 側の Git 連携（Workers Builds）が行うため、ここは手動実行のみ
 on:
-  push: { branches: [main, 'claude/**'] }
   workflow_dispatch: {}
 jobs:
   deploy:
