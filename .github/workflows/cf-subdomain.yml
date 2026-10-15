@@ -17,21 +17,29 @@ jobs:
           if ! echo "$SUB" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'; then
             echo "::error::使えない名前です（小文字英数字とハイフン、先頭末尾のハイフン不可）"; exit 1
           fi
-      - name: 現在のサブドメイン
-        env:
-          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          curl -sS "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain" -H "Authorization: Bearer $TOKEN"
-      - name: サブドメインを変更
+      - name: サブドメインを付け替え（失敗時は元に戻す）
         env:
           TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SUB: ${{ inputs.subdomain }}
         run: |
-          res=$(curl -sS -X PUT "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain" \
-            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-            -d "{\"subdomain\":\"$SUB\"}")
-          echo "$res"
-          echo "$res" | grep -q '"success":true' || { echo "::error::変更に失敗しました（上の errors を確認）"; exit 1; }
-          echo "::notice::新しいURL: https://gyusuji.$SUB.workers.dev"
+          API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain"
+          AUTH="Authorization: Bearer $TOKEN"
+          put() { curl -sS -X PUT "$API" -H "$AUTH" -H 'Content-Type: application/json' -d "{\"subdomain\":\"$1\"}"; }
+          cur=$(curl -sS "$API" -H "$AUTH")
+          echo "現在: $cur"
+          OLD=$(echo "$cur" | sed -n 's/.*"subdomain": *"\([^"]*\)".*/\1/p')
+          if [ "$OLD" = "$SUB" ]; then echo "::notice::すでに $SUB です"; exit 0; fi
+          # 既存のサブドメインがあると上書きできないため、一度削除してから付け直す
+          if [ -n "$OLD" ]; then
+            del=$(curl -sS -X DELETE "$API" -H "$AUTH"); echo "削除: $del"
+            echo "$del" | grep -Eq '"success": *true' || { echo "::error::旧サブドメインを削除できませんでした"; exit 1; }
+          fi
+          res=$(put "$SUB"); echo "設定: $res"
+          if echo "$res" | grep -Eq '"success": *true'; then
+            echo "::notice::新しいURL: https://gyusuji.$SUB.workers.dev（反映まで数分かかることがあります）"
+            exit 0
+          fi
+          echo "::error::$SUB は使えませんでした（使用中の可能性）。元の $OLD に戻します"
+          [ -n "$OLD" ] && echo "戻す: $(put "$OLD")"
+          exit 1
