@@ -24,7 +24,7 @@ body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Meiryo', sans-
 .list .it .ico { width: 32px; height: 32px; flex: none; }
 
 /* 全画面メニュー（タイトル〜待機） */
-.full { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.full { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
 .full .win { position: static; }
 .ttl { font-size: 34px; font-weight: bold; color: #ffcf3f; letter-spacing: 2px; }
 .full input { font: inherit; font-size: 16px; width: 160px; background: #000; color: #fff; border: 1px solid #fff; padding: 4px 6px; text-align: center; }
@@ -48,3 +48,11 @@ body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Meiryo', sans-
 .logwin .ft { padding: 4px 12px; color: #9aa; font-size: 12px; }
 .okbtn { width: 48px; height: 32px; background: var(--win); color: #fff; border: 1px solid #fff; font-size: 18px; cursor: pointer; }
 .okbtn:hover { background: #4060a0; }
+
+/* タイトル画面 */
+.titlescr { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 34px; gap: 10px; cursor: pointer; }
+#stage[data-orient="port"] .titlescr { padding-bottom: 120px; }
+.titlescr .win { position: static; }
+.press { font-size: 20px; font-weight: 900; letter-spacing: 4px; color: #fff; text-shadow: 0 0 8px #ffb300, 2px 2px 0 #3a1500, -2px -2px 0 #3a1500, 2px -2px 0 #3a1500, -2px 2px 0 #3a1500; animation: blink 1.1s steps(2, start) infinite; margin-bottom: 28px; }
+@keyframes blink { to { visibility: hidden; } }
+.tfoot { position: absolute; bottom: 6px; font-size: 10px; color: #ddd; text-shadow: 1px 1px 0 #000; }

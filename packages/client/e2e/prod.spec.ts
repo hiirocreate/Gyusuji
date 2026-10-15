@@ -8,6 +8,7 @@ async function open(browser: Browser, name: string, ua: string, vp: { width: num
   const p = await ctx.newPage();
   await p.addInitScript((n) => localStorage.setItem('beefhunter.v1', JSON.stringify({ name: n, speed: 3, sound: false })), name);
   await p.goto('https://gyusuji.h-onoue-test.workers.dev/');
+  await p.locator('.press').click();
   await p.getByText('ネット対戦をする').click();
   await p.getByText('決定').click();
   return p;

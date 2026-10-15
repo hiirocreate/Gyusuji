@@ -8,6 +8,7 @@ import { settingsForm } from '../forms.js';
 import { LocalHost, ReplayHost, net, type ReplayData } from '../net.js';
 import { store, update } from '../store.js';
 import { $, h, menuWin, screenEl, type MenuItem } from '../ui.js';
+import { TitleBackdrop } from './titlebg.js';
 
 type Mode = 'solo' | 'net';
 const stars = (n: number) => (n ? '★'.repeat(n) : 'なし');
@@ -22,14 +23,18 @@ export class Menu extends Phaser.Scene {
   private cpus = [true, true, true];
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private offs: (() => void)[] = [];
+  private bg!: TitleBackdrop;
+  private pressed = false;
 
   constructor() {
     super('Menu');
   }
 
   create(data: { to?: string }) {
-    this.cameras.main.setBackgroundColor('#000000');
+    this.cameras.main.setBackgroundColor('#1b4fa0');
     $('chatbar').style.display = 'none';
+    this.bg = new TitleBackdrop(this);
+    this.bg.build();
     bgm('title');
     this.events.once('shutdown', () => { this.offs.forEach((f) => f()); this.offs = []; screenEl().replaceChildren(); });
     this.offs.push(net.started.on((host) => this.scene.start('Field', { host })));
@@ -38,6 +43,7 @@ export class Menu extends Phaser.Scene {
   }
 
   private show(...els: (HTMLElement | null | false)[]) {
+    this.bg?.setLogo(false);
     screenEl().replaceChildren(h('div', { class: 'full' }, ...els.filter(Boolean) as HTMLElement[]));
   }
 
@@ -47,15 +53,23 @@ export class Menu extends Phaser.Scene {
 
   title() {
     $('chatbar').style.display = 'none';
-    this.show(
-      h('div', { class: 'ttl' }, 'BEEF HUNTER'),
-      this.list([
+    this.bg.setLogo(true);
+    const foot = h('div', { class: 'tfoot' }, 'Ver 0.2　©2026 BEEF HUNTER');
+    if (!this.pressed) {
+      // 「TAP TO START」→ タップでメニュー
+      const go = () => { this.pressed = true; se('select'); this.title(); };
+      screenEl().replaceChildren(h('div', { class: 'titlescr', onclick: go }, h('div', { class: 'press' }, 'TAP TO START'), foot));
+      return;
+    }
+    screenEl().replaceChildren(h('div', { class: 'titlescr' },
+      menuWin([
         { label: '一人で遊ぶ', on: () => { this.mode = 'solo'; this.name(); } },
         { label: 'ネット対戦をする', on: () => { this.mode = 'net'; this.name(); } },
         { label: '設定', on: () => this.options() },
         { label: '戦績・実績', on: () => this.records() },
         { label: 'リプレイ再生', on: () => this.loadReplay() },
-      ]));
+      ].map((it) => ({ ...it, on: () => { se('select'); it.on(); } })), 'min-width:180px'),
+      foot));
   }
 
   name() {
