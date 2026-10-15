@@ -32,8 +32,10 @@ jobs:
           if [ "$OLD" = "$SUB" ]; then echo "::notice::すでに $SUB です"; exit 0; fi
           # 既存のサブドメインがあると上書きできないため、一度削除してから付け直す
           if [ -n "$OLD" ]; then
-            del=$(curl -sS -X DELETE "$API" -H "$AUTH"); echo "削除: $del"
-            echo "$del" | grep -Eq '"success": *true' || { echo "::error::旧サブドメインを削除できませんでした"; exit 1; }
+            # 成功時は本文なし（HTTP 2xx）で返るため、ステータスコードで判定
+            code=$(curl -sS -o /tmp/del.json -w '%{http_code}' -X DELETE "$API" -H "$AUTH")
+            echo "削除: HTTP $code $(cat /tmp/del.json)"
+            case "$code" in 2*) ;; *) echo "::error::旧サブドメインを削除できませんでした"; exit 1;; esac
           fi
           res=$(put "$SUB"); echo "設定: $res"
           if echo "$res" | grep -Eq '"success": *true'; then
