@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { C, ENEMIES, GameMap, MAPS } from '@gyusuji/shared';
 import type { Dir } from '@gyusuji/shared';
-import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, v2Tile } from '../assets.js';
+import { DIR_ROW, HEROES, NPC_OF, OBJ_OF } from '../assets.js';
+import { drawShoreline, pathTexture, terrainTexture } from './classicTerrain.js';
 import { layout, onLayout } from '../layout.js';
 
 const T = C.TILE;
@@ -29,25 +30,33 @@ export class TitleBackdrop {
       blits[tex + depth] ??= s.add.blitter(0, 0, `${tex}+`).setDepth(depth);
       blits[tex + depth].create(x * T - 1, y * T - 1);
     };
+    const sea0 = s.add.blitter(-1, -1, 'classic/sea_0+').setDepth(-3);
+    const sea1 = s.add.blitter(-1, -1, 'classic/sea_1+').setDepth(-3).setVisible(false);
     for (let y = -8; y < d.height + 8; y++) {
       for (let x = -8; x < d.width + 8; x++) {
         const inside = x >= 0 && y >= 0 && x < d.width && y < d.height;
-        const tex = inside ? v2Tile(d.terrain[y * d.width + x]) : 'sea';
-        put(tex === 'sea' ? 'tiles/sea_0' : tex, x, y, -3);
+        const tex = inside ? terrainTexture(d.terrain[y * d.width + x], d.terrainSet === 'v2', x, y) : 'sea';
+        if (tex === 'sea') {
+          sea0.create(x * T, y * T);
+          sea1.create(x * T, y * T);
+        } else put(tex, x, y, -2);
       }
     }
+    s.time.addEvent({ delay: 700, loop: true, callback: () => { sea0.setVisible(!sea0.visible); sea1.setVisible(!sea1.visible); } });
+    drawShoreline(s, d);
     for (const p of d.path) {
-      const tex = p.c === 'start' ? 'tiles/path_start' : p.c === 'branch' ? 'tiles/path_branch' : /boss/.test(p.c) ? 'tiles/path_boss' : 'tiles/path';
-      put(tex, p.x, p.y, -2);
+      const t = d.terrain[p.y * d.width + p.x];
+      const onSea = d.terrainSet === 'v2' ? t === 0 : t === 3;
+      put(pathTexture(p.c, onSea), p.x, p.y, -1);
     }
     for (const o of d.objects) {
       const cx = o.x * T + T / 2;
       const cy = o.y * T + T / 2;
-      if (NPC_OF[o.type]) s.add.sprite(cx, cy - 10, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(0.9).setDepth(o.y * 10);
+      if (NPC_OF[o.type]) s.add.sprite(cx, cy - 10, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(0.72).setDepth(o.y * 10);
       else if (OBJ_OF[o.type]) s.add.image(cx, cy, OBJ_OF[o.type]).setScale(0.8).setDepth(o.y * 10);
       else if (ENEMIES[o.type]) {
         const e = ENEMIES[o.type];
-        s.add.sprite(cx, cy - 10, e.sprite).setScale(e.boss ? 1.15 : 0.9).setDepth(o.y * 10).play(`${e.sprite}_idle`);
+        s.add.sprite(cx, cy - 10, e.sprite).setScale(e.boss ? 1.15 : 0.72).setDepth(o.y * 10).play(`${e.sprite}_idle`);
       }
     }
     // スタートからラスボスまでの道順（分岐は楽な道）
@@ -66,7 +75,7 @@ export class TitleBackdrop {
     // 主人公5人の隊列
     HEROES.forEach((k) => {
       this.shadows.push(s.add.ellipse(0, 0, 22, 7, 0x000000, 0.35));
-      this.party.push(s.add.sprite(0, 0, k).setScale(0.9));
+      this.party.push(s.add.sprite(0, 0, k).setScale(0.72));
     });
     this.place(0);
     s.cameras.main.startFollow(this.party[0], true, 0.08, 0.08);
@@ -105,7 +114,7 @@ export class TitleBackdrop {
     }
   }
 
-  /** 金色の立体ロゴ（オリジナル） */
+  /** 2000年代ブラウザRPG風の素朴なタイトル看板 */
   private makeLogo(): Phaser.GameObjects.Container {
     const s = this.scene;
     const key = 'title-logo';
@@ -114,54 +123,39 @@ export class TitleBackdrop {
       const H = 300;
       const t = s.textures.createCanvas(key, W, H)!;
       const c = t.getContext();
-      const font = '900 150px "Arial Black", "Hiragino Kaku Gothic ProN", sans-serif';
-      c.font = font;
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       const cx = W / 2;
-      const cy = 120;
-      // 奥行き（押し出し）
-      for (let i = 14; i > 0; i--) {
-        c.fillStyle = i > 10 ? '#1a0800' : '#5a2400';
-        c.fillText('BEEF HUNTER', cx + i * 0.6, cy + i);
-      }
-      c.lineJoin = 'round';
-      c.lineWidth = 18;
-      c.strokeStyle = '#2a0e00';
-      c.strokeText('BEEF HUNTER', cx, cy);
-      const g = c.createLinearGradient(0, cy - 70, 0, cy + 70);
-      g.addColorStop(0, '#fffbe0');
-      g.addColorStop(0.35, '#ffd84a');
-      g.addColorStop(0.55, '#f39a00');
-      g.addColorStop(1, '#b84a00');
-      c.fillStyle = g;
-      c.fillText('BEEF HUNTER', cx, cy);
-      // ハイライト
-      c.save();
-      c.globalCompositeOperation = 'source-atop';
-      c.fillStyle = 'rgba(255,255,255,0.35)';
-      c.fillRect(0, cy - 70, W, 34);
-      c.restore();
-      // サブタイトルのリボン
-      const ry = 240;
-      c.fillStyle = '#9a1020';
-      c.beginPath();
-      c.moveTo(300, ry - 34); c.lineTo(900, ry - 34); c.lineTo(940, ry); c.lineTo(900, ry + 34); c.lineTo(300, ry + 34); c.lineTo(260, ry);
-      c.closePath();
-      c.fill();
-      c.lineWidth = 5;
-      c.strokeStyle = '#ffd84a';
-      c.stroke();
-      c.font = 'bold 50px "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
-      c.fillStyle = '#ffffff';
-      c.fillText('〜 す ご ろ く バ ト ル 〜', cx, ry + 2);
+      // 明るい地形の上でも読める、飾りを抑えたクリーム色の看板。
+      c.fillStyle = 'rgba(15, 31, 44, 0.45)';
+      c.fillRect(174, 43, 852, 176);
+      c.fillStyle = '#fff0bd';
+      c.fillRect(166, 34, 852, 176);
+      c.lineWidth = 8;
+      c.strokeStyle = '#203040';
+      c.strokeRect(166, 34, 852, 176);
+      c.lineWidth = 2;
+      c.strokeStyle = '#ffffff';
+      c.strokeRect(178, 46, 828, 152);
+
+      c.font = '900 132px "Arial Black", "Hiragino Kaku Gothic ProN", sans-serif';
+      const titleWidth = c.measureText('BEEF HUNTER').width;
+      if (titleWidth > 780) c.font = `900 ${Math.floor(132 * 780 / titleWidth)}px "Arial Black", "Hiragino Kaku Gothic ProN", sans-serif`;
+      c.lineJoin = 'miter';
+      c.lineWidth = 3;
+      c.strokeStyle = '#ffffff';
+      c.strokeText('BEEF HUNTER', cx, 105);
+      c.fillStyle = '#203040';
+      c.fillText('BEEF HUNTER', cx, 105);
+
+      c.font = 'bold 40px "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
+      c.fillStyle = '#365d37';
+      c.fillText('〜 す ご ろ く バ ト ル 〜', cx, 166);
       t.refresh();
     }
     const img = s.add.image(0, 0, key);
-    const glow = s.add.sprite(-260, -40, 'fx/gold').setScale(1.2).play({ key: 'fx/gold', repeat: -1 });
-    const glow2 = s.add.sprite(270, 10, 'fx/gold').setScale(0.9).play({ key: 'fx/gold', repeat: -1, delay: 300 });
-    const ct = s.add.container(0, 0, [img, glow, glow2]).setScrollFactor(0).setDepth(9500);
-    s.tweens.add({ targets: ct, y: '+=6', yoyo: true, repeat: -1, duration: 1600, ease: 'Sine.easeInOut' });
+    const ct = s.add.container(0, 0, [img]).setScrollFactor(0).setDepth(9500);
+    s.tweens.add({ targets: ct, y: '+=2', yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.easeInOut' });
     return ct;
   }
 

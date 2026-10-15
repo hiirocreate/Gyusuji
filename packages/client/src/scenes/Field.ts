@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { C, ENEMIES, GameMap, ITEMS, MAPS } from '@gyusuji/shared';
 import type { Ask, GameEvent, PublicPlayer, PublicView } from '@gyusuji/shared';
 import { Tracker, unlock } from '../achievements.js';
-import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, classicTile, iconStyle, v2Tile } from '../assets.js';
+import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, iconStyle } from '../assets.js';
 import { bgm, se } from '../audio.js';
 import { buildChatBar, closeLog, notify, say, setSender, system } from '../chat.js';
 import { onLayout } from '../layout.js';
@@ -13,12 +13,13 @@ import type { Battle } from './Battle.js';
 import type { Overlay } from './Overlay.js';
 import type { Status } from './Status.js';
 import { fieldCam, frames, tween, wait } from './fieldcam.js';
+import { drawShoreline, pathTexture, terrainTexture } from './classicTerrain.js';
 
 const T = C.TILE;
 /** キャラの描画位置はマス中心から上へ10px（SQU_CHR_OFFS_Y） */
 const CHR_OFFS_Y = -10;
-/** キャラは少し寄りで表示（素材64px → 約58px） */
-const HERO_SCALE = 0.9;
+/** 隣接マスを隠さない小さなプリレンダ風の立ち姿。判定位置は従来どおり。 */
+const HERO_SCALE = 0.72;
 type Batch = { events: GameEvent[]; view: PublicView };
 const ARROWS = ['up', 'down', 'left', 'right'];
 
@@ -115,14 +116,14 @@ export class Field extends Phaser.Scene {
       blits[tex].create(x * T - 1, y * T - 1);
     };
     // タイルは縁を1px延長した版を1pxずらして重ねる（拡大時の隙間対策）
-    const sea0 = this.add.blitter(-1, -1, 'tiles/sea_0+').setDepth(-3);
-    const sea1 = this.add.blitter(-1, -1, 'tiles/sea_1+').setDepth(-3).setVisible(false);
+    const sea0 = this.add.blitter(-1, -1, 'classic/sea_0+').setDepth(-3);
+    const sea1 = this.add.blitter(-1, -1, 'classic/sea_1+').setDepth(-3).setVisible(false);
     // 画面外も海で埋める
     for (let y = -6; y < d.height + 6; y++) {
       for (let x = -6; x < d.width + 6; x++) {
         const inside = x >= 0 && y >= 0 && x < d.width && y < d.height;
         const t = inside ? d.terrain[y * d.width + x] : -1;
-        const tex = !inside ? 'sea' : v2 ? v2Tile(t) : classicTile(t);
+        const tex = !inside ? 'sea' : terrainTexture(t, v2, x, y);
         if (tex === 'sea') {
           sea0.create(x * T, y * T);
           sea1.create(x * T, y * T);
@@ -130,11 +131,11 @@ export class Field extends Phaser.Scene {
       }
     }
     this.time.addEvent({ delay: 700, loop: true, callback: () => { sea0.setVisible(!sea0.visible); sea1.setVisible(!sea1.visible); } });
+    drawShoreline(this, d);
     for (const p of d.path) {
       const t = d.terrain[p.y * d.width + p.x];
       const onSea = v2 ? t === 0 : t === 3;
-      const tex = p.c === 'start' ? 'tiles/path_start' : p.c === 'branch' ? 'tiles/path_branch' : p.c === 'lastboss' ? 'tiles/path_lastboss'
-        : /^boss/.test(p.c) ? 'tiles/path_boss' : onSea ? 'tiles/bridge' : 'tiles/path';
+      const tex = pathTexture(p.c, onSea);
       blits[`p:${tex}`] ??= this.add.blitter(0, 0, `${tex}+`).setDepth(-1);
       blits[`p:${tex}`].create(p.x * T - 1, p.y * T - 1);
     }

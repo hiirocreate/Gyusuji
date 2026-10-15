@@ -8,6 +8,7 @@ import { settingsForm } from '../forms.js';
 import { LocalHost, ReplayHost, net, type ReplayData } from '../net.js';
 import { store, update } from '../store.js';
 import { $, h, menuWin, screenEl, type MenuItem } from '../ui.js';
+import { HEROES } from '../assets.js';
 import { TitleBackdrop } from './titlebg.js';
 
 type Mode = 'solo' | 'net';
@@ -44,11 +45,17 @@ export class Menu extends Phaser.Scene {
 
   private show(...els: (HTMLElement | null | false)[]) {
     this.bg?.setLogo(false);
-    screenEl().replaceChildren(h('div', { class: 'full' }, ...els.filter(Boolean) as HTMLElement[]));
+    const contents = els.filter(Boolean) as HTMLElement[];
+    // 以降の各画面は同じ小さな紺の見出し窓を使う。
+    contents[0]?.classList.add('menu-heading', 'win');
+    const chatVisible = $('chatbar').style.display === 'flex';
+    screenEl().replaceChildren(h('div', { class: `full menu-full${chatVisible ? ' chat-visible' : ''}` }, ...contents));
   }
 
-  private list(items: MenuItem[]) {
-    return menuWin(items.map((it) => ({ ...it, on: () => { se('select'); it.on?.(); } })), 'min-width:200px');
+  private list(items: MenuItem[], style = 'min-width:200px') {
+    const list = menuWin(items.map((it) => ({ ...it, on: () => { se('select'); it.on?.(); } })), style);
+    list.classList.add('menu-list');
+    return list;
   }
 
   title() {
@@ -62,18 +69,18 @@ export class Menu extends Phaser.Scene {
       return;
     }
     screenEl().replaceChildren(h('div', { class: 'titlescr' },
-      menuWin([
+      this.list([
         { label: '一人で遊ぶ', on: () => { this.mode = 'solo'; this.name(); } },
         { label: 'ネット対戦をする', on: () => { this.mode = 'net'; this.name(); } },
         { label: '設定', on: () => this.options() },
         { label: '戦績・実績', on: () => this.records() },
         { label: 'リプレイ再生', on: () => this.loadReplay() },
-      ].map((it) => ({ ...it, on: () => { se('select'); it.on(); } })), 'min-width:180px'),
+      ], 'min-width:180px'),
       foot));
   }
 
   name() {
-    const input = h('input', { value: store().name, maxLength: C.NAME_MAX, placeholder: '6文字まで' });
+    const input = h('input', { class: 'menu-input', value: store().name, maxLength: C.NAME_MAX, placeholder: '6文字まで' });
     const ok = () => {
       const v = input.value.trim().slice(0, C.NAME_MAX);
       if (!v) return input.focus();
@@ -82,7 +89,7 @@ export class Menu extends Phaser.Scene {
       else this.chars();
     };
     input.addEventListener('keydown', (e) => e.key === 'Enter' && ok());
-    this.show(h('div', {}, '名前を入力してください'), input, this.list([{ label: '決定', on: ok }, { label: 'もどる', on: () => this.title() }]));
+    this.show(h('div', {}, '名前を入力してください'), h('div', { class: 'win menu-form' }, input), this.list([{ label: '決定', on: ok }, { label: 'もどる', on: () => this.title() }]));
   }
 
   async rooms() {
@@ -126,18 +133,25 @@ export class Menu extends Phaser.Scene {
   }
 
   chars() {
-    const items: MenuItem[] = CHARS.map((c) => ({
-      label: `${c.name}（${c.role}）　HP${stars(c.stars.hp)} MP${stars(c.stars.mp)} 運${stars(c.stars.luck)}`,
-      on: () => {
+    const rows = CHARS.map((c) => {
+      const choose = () => {
         this.charId = c.id;
         if (this.mode === 'net') {
           net.send('setChar', { id: c.id });
           this.waitNet();
         } else this.waitSolo();
-      },
-    }));
-    items.push({ label: 'もどる', on: () => { if (this.mode === 'net') net.leave(); this.title(); } });
-    this.show(h('div', {}, 'キャラクターを選んでください'), this.list(items));
+      };
+      const row = h('div', { class: 'it char-it', tabindex: 0 },
+        h('span', { class: 'hero-thumb', style: `background:url(./assets/img/chars/${HEROES[c.id]}.png) 0 0 / 144px 144px no-repeat` }),
+        h('span', { class: 'char-name' }, `${c.name}（${c.role}）`),
+        h('span', { class: 'char-stats stars' }, `　HP${stars(c.stars.hp)} MP${stars(c.stars.mp)} 運${stars(c.stars.luck)}`));
+      row.addEventListener('click', () => { se('select'); choose(); });
+      return row;
+    });
+    const back = h('div', { class: 'it', tabindex: 0 }, 'もどる');
+    back.addEventListener('click', () => { se('select'); if (this.mode === 'net') net.leave(); this.title(); });
+    this.show(h('div', {}, 'キャラクターを選んでください'),
+      h('div', { class: 'win list char-list', style: 'width:340px;max-width:calc(100% - 20px)' }, ...rows, back));
   }
 
   private chatOn(local: boolean) {

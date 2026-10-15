@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { HEROES, MONSTERS, SHEETS } from '../assets.js';
+import { makeClassicTerrain } from './classicTerrain.js';
 
 export class Boot extends Phaser.Scene {
   constructor() {
@@ -22,8 +23,10 @@ export class Boot extends Phaser.Scene {
   }
   create() {
     makeStatFont(this);
+    const visualTiles = makeClassicTerrain(this);
     // 縦画面（1.2857倍）でタイル間に隙間が出ないよう、縁を1px延長したタイル（42×42）を作る
     for (const k of Object.keys(SHEETS)) if (k.startsWith('tiles/')) extrude(this, k);
+    for (const k of visualTiles) extrude(this, k);
     for (const [k, v] of Object.entries(SHEETS)) {
       if (!k.startsWith('fx/') || v.frames <= 1) continue;
       this.anims.create({ key: k, frames: this.anims.generateFrameNumbers(k, {}), frameRate: 16, repeat: k === 'fx/cursor' || k === 'fx/piyo' || k === 'fx/curse' ? -1 : 0 });
