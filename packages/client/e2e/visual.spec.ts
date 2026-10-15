@@ -79,9 +79,37 @@ for (const orient of ['land', 'port'] as const) {
           await apple.click();
           await expect(page.locator('.tap-instruction')).toContainText('もう一度タップ');
           await expect(page.locator('.confirm-tap')).toHaveCount(1);
+          const descGeometry = await page.evaluate(() => {
+            const desc = document.querySelector('.item-desc')!;
+            const row = document.querySelector('.confirm-tap')!;
+            const a = desc.getBoundingClientRect();
+            const b = row.getBoundingClientRect();
+            return {
+              separateLayer: desc.parentElement?.id === 'overlay',
+              pointerTransparent: getComputedStyle(desc).pointerEvents === 'none',
+              overlapsChoice: a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top,
+            };
+          });
+          expect(descGeometry).toEqual({ separateLayer: true, pointerTransparent: true, overlapsChoice: false });
           expect(await page.evaluate(() => (window as any).__sent)).toEqual([]);
           await apple.click();
           expect(await page.evaluate(() => (window as any).__sent)).toEqual([{ type: 'useItem', slot: 0 }]);
+
+          // Simulate the end of the chick stun followed by movement: its marker must disappear, not remain on the old tile.
+          const chickResult = await page.evaluate(async () => {
+            const f = (window as any).game.scene.getScene('Field');
+            const p = f.view.players[0];
+            p.stun = 1;
+            f.setMarks(p);
+            const destination = f.map.data.path.find((c: any) => Math.abs(c.x - p.x) + Math.abs(c.y - p.y) === 1);
+            if (!destination) throw new Error('No adjacent path cell for the chick-marker test');
+            const end = { ...f.view, players: f.view.players.map((q: any, i: number) => i === 0 ? { ...q, stun: 0, x: destination.x, y: destination.y } : q) };
+            const hadChick = f.marks[0].some((m: any) => m.texture.key === 'fx/piyo');
+            await f.play({ t: 'move', seat: 0, cells: [{ x: destination.x, y: destination.y }] }, end);
+            return { hadChick, chickAfterMove: f.marks[0].some((m: any) => m.texture.key === 'fx/piyo'), position: [f.heroes[0].x, f.heroes[0].y] };
+          });
+          expect(chickResult.hadChick).toBe(true);
+          expect(chickResult.chickAfterMove).toBe(false);
         }
         const beforeRotate = await page.locator('#stage').getAttribute('data-orient');
         await page.getByRole('button', { name: '画面を回転' }).click();

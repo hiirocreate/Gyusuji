@@ -85,6 +85,9 @@ body { font-family: system-ui, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Mei
 
 /* Items show a restrained hint first; the highlighted row signals the second tap. */
 .tap-instruction { max-width: 248px; margin-top: 5px; padding-top: 5px; border-top: 1px solid #f2d49b80; color: #ffe29a; font-size: 11px; line-height: 16px; text-align: center; white-space: normal; }
+.item-desc { position: absolute; padding: 10px 12px; white-space: normal; overflow-wrap: anywhere; box-shadow: 0 4px 0 #754c44, 0 8px 18px #0008, inset 0 1px 0 #ffffff36; }
+.item-desc-title { margin-bottom: 4px; color: #ffe29a; font-size: 14px; line-height: 19px; font-weight: 900; }
+.item-desc-copy { color: #fffdf6; font-size: 12px; line-height: 17px; }
 .confirm-tap { position: relative; filter: brightness(1.08); }
 .confirm-tap::after { content: 'もう一度'; margin-left: auto; padding: 0 6px; border: 1px solid #ffe7a0; border-radius: 10px; background: #382b49; color: #fff0b0; font-size: 10px; font-weight: 800; line-height: 17px; }
 .win-icon { filter: drop-shadow(0 1px 2px #1d1733); }

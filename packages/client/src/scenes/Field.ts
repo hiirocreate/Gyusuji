@@ -5,7 +5,7 @@ import { Tracker, unlock } from '../achievements.js';
 import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, iconStyle } from '../assets.js';
 import { bgm, se } from '../audio.js';
 import { buildChatBar, closeLog, notify, say, setSender, system } from '../chat.js';
-import { onLayout } from '../layout.js';
+import { layout, onLayout } from '../layout.js';
 import { net, type Host, type OnlineHost } from '../net.js';
 import { update } from '../store.js';
 import { $, centerWin, fieldUI, h, menuWin, type MenuItem } from '../ui.js';
@@ -94,12 +94,14 @@ export class Field extends Phaser.Scene {
       host.batch.on((b) => { this.queue.push(b); void this.pump(); }),
       host.askChanged.on(() => this.refreshAsk(true)),
       host.kind === 'online' ? host.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })) : () => {},
-      onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); })),
+      onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); this.positionDesc(); })),
     ];
     this.events.once('shutdown', () => {
       window.removeEventListener('game-exit', exitGame);
       this.offs.forEach((f) => f());
       fieldUI().replaceChildren();
+      $('overlay').querySelectorAll('.item-desc').forEach((el) => el.remove());
+      this.descWin = null;
       closeLog();
       this.scene.stop('Battle');
       this.scene.stop('Overlay');
@@ -239,12 +241,25 @@ export class Field extends Phaser.Scene {
   }
 
   private descWin: HTMLElement | null = null;
+  private positionDesc() {
+    if (!this.descWin) return;
+    const L = layout();
+    const left = L.orient === 'land' ? L.field.x + L.field.size + 8 : 12;
+    const top = L.orient === 'land' ? 164 : L.field.y + L.field.size + 12;
+    this.descWin.style.left = `${left}px`;
+    this.descWin.style.top = `${top}px`;
+    this.descWin.style.width = `${L.w - left - 12}px`;
+  }
+
   private showDesc(it: MenuItem | null) {
     this.descWin?.remove();
     this.descWin = null;
     if (!it?.desc) return;
-    this.descWin = this.addWin(centerWin(140, 240, h('div', {}, it.label), h('div', { style: 'font-size:12px' }, it.desc)));
-    // Keep the hint visible while allowing the second tap to reach the highlighted row beneath it.
+    this.descWin = h('div', { class: 'win item-desc', 'aria-live': 'polite' },
+      h('div', { class: 'item-desc-title' }, it.label), h('div', { class: 'item-desc-copy' }, it.desc));
+    $('overlay').append(this.descWin);
+    this.positionDesc();
+    // A dedicated screen-space window keeps every selectable row unobstructed.
     this.descWin.style.pointerEvents = 'none';
   }
 
@@ -428,6 +443,14 @@ export class Field extends Phaser.Scene {
     if (p.cursed) list.push(this.add.sprite(s.x + 10, s.y - 18, 'fx/curse').play('fx/curse').setScale(0.35).setDepth(99999));
   }
 
+  private syncMarks(seat: number) {
+    const s = this.heroes[seat];
+    for (const mark of this.marks[seat]) {
+      if (mark.texture.key === 'fx/piyo') mark.setPosition(s.x, s.y - 22);
+      else if (mark.texture.key === 'fx/curse') mark.setPosition(s.x + 10, s.y - 18);
+    }
+  }
+
   private fxAt(name: string, wx: number, wy: number, scale = 0.7) {
     if (!this.textures.exists(`fx/${name}`)) return;
     const s = this.add.sprite(wx, wy, `fx/${name}`).setDepth(99998).setScale(scale).play(`fx/${name}`);
@@ -460,6 +483,7 @@ export class Field extends Phaser.Scene {
     switch (e.t) {
       case 'turn':
         this.view = { ...this.view, turn: e.seat, round: e.round };
+        if (end.players[e.seat]) this.setMarks(end.players[e.seat]);
         this.restack();
         this.status.draw(this.view, e.seat);
         this.lookAt(e.seat);
@@ -485,6 +509,7 @@ export class Field extends Phaser.Scene {
       case 'move': {
         const seat = e.seat;
         const s = this.heroes[seat];
+        if (end.players[seat]) this.setMarks(end.players[seat]);
         this.lookAt(seat);
         this.cursor.setVisible(false);
         let px = Math.floor(s.x / T);
@@ -495,6 +520,7 @@ export class Field extends Phaser.Scene {
           // 1マス 5 フレームの直線補間
           await tween(this, { targets: s, x: c.x * T + T / 2, y: c.y * T + T / 2 + CHR_OFFS_Y, duration: frames(5) });
           this.shadows[seat].setPosition(s.x, s.y - CHR_OFFS_Y + 8);
+          this.syncMarks(seat);
           this.overlay.stepFx(s.x, s.y + 10);
           s.setDepth(this.depthOf(c.y, 6));
           se('step');

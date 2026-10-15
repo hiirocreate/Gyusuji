@@ -46,15 +46,17 @@ def draw_die(top=5, left=2, right=3, gold=False, tilt=0):
     poly(d,[q,m,z,l], '#d7deea' if not gold else '#e7a83a', INK, 3)
     poly(d,[b,r,z,m], '#aebbd0' if not gold else '#d48628', INK, 3)
     def pip(x,y,red=False):
-        color='#d63e45' if red else '#33435f'
-        ell(d,(x-3.2,y-3.2,x+3.2,y+3.2),color,None)
-        ell(d,(x-1.6,y-2.4,x-.2,y-1), '#fff5df' if red else '#f4f6fb', None)
+        color='#d63e45' if red else '#28334a'
+        # Larger, clearly separated round pips like a real ivory tabletop die.
+        ell(d,(x-4.6,y-4.6,x+4.6,y+4.6),color,None)
+        ell(d,(x-2.5,y-3.0,x-.5,y-1.0), '#fff5df' if red else '#aeb8c8', None)
     # Dice pattern positions are set in face-local coordinates.
     def face(points, value, redone=False):
         center=(sum(x for x,_ in points)/4,sum(y for _,y in points)/4)
-        dx=(points[1][0]-points[0][0])*0.18; dy=(points[1][1]-points[0][1])*0.18
-        ex=(points[3][0]-points[0][0])*0.18; ey=(points[3][1]-points[0][1])*0.18
-        loc={1:[(0,0)],2:[(-.55,-.55),(.55,.55)],3:[(-.55,-.55),(0,0),(.55,.55)],4:[(-.55,-.55),(.55,-.55),(-.55,.55),(.55,.55)],5:[(-.55,-.55),(.55,-.55),(0,0),(-.55,.55),(.55,.55)],6:[(-.55,-.55),(.55,-.55),(-.55,0),(.55,0),(-.55,.55),(.55,.55)]}[value]
+        # Use most of the face's inscribed pip grid instead of clustering at its center.
+        dx=(points[1][0]-points[0][0])*0.31; dy=(points[1][1]-points[0][1])*0.31
+        ex=(points[3][0]-points[0][0])*0.31; ey=(points[3][1]-points[0][1])*0.31
+        loc={1:[(0,0)],2:[(-.72,-.72),(.72,.72)],3:[(-.72,-.72),(0,0),(.72,.72)],4:[(-.72,-.72),(.72,-.72),(-.72,.72),(.72,.72)],5:[(-.72,-.72),(.72,-.72),(0,0),(-.72,.72),(.72,.72)],6:[(-.72,-.72),(.72,-.72),(-.72,0),(.72,0),(-.72,.72),(.72,.72)]}[value]
         for i,(u,v) in enumerate(loc):
             pip(center[0]+u*dx+v*ex,center[1]+u*dy+v*ey,redone and i==0)
     face([a,b,m,q],top,top==1)
