@@ -115,11 +115,17 @@ for (const orient of ['land', 'port'] as const) {
       await page.locator('.askwin .it', { hasText: 'アイテム' }).click();
       await page.waitForTimeout(300);
       await page.screenshot({ path: `e2e-out/${orient}_4items.png` });
-      await page.locator('.askwin .it', { hasText: 'いちころ' }).click({ timeout: 5000 });
+      const specialDie = page.locator('.askwin .it', { hasText: 'いちころ' });
+      await specialDie.click({ timeout: 5000 });
+      await expect(page.locator('.tap-instruction')).toContainText('もう一度タップ');
+      await specialDie.click();
       await expect(page.locator('.askwin .it', { hasText: '開ける' })).toBeVisible({ timeout: 15000 });
       await page.waitForTimeout(400);
       await page.screenshot({ path: `e2e-out/${orient}_5event.png` });
-      await page.locator('.askwin .it', { hasText: '開ける' }).click();
+      const openChest = page.locator('.askwin .it', { hasText: '開ける' });
+      await openChest.click();
+      await expect(page.locator('.tap-instruction')).toContainText('もう一度タップ');
+      await openChest.click();
       await untilMyAction(page);
       // 戦闘：中ボス手前のマスへ置いてから移動
       await page.evaluate(() => {

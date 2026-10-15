@@ -14,7 +14,7 @@ export class Boot extends Phaser.Scene {
     for (const k of HEROES) this.load.spritesheet(k, `chars/${k}.png`, { frameWidth: 64, frameHeight: 64 });
     for (const k of MONSTERS) this.load.spritesheet(k, `chars/${k}.png`, { frameWidth: 64, frameHeight: 64 });
     for (const [k, v] of Object.entries(SHEETS)) {
-      if (v.frames > 1 || k.startsWith('npc/') || k === 'items/icons') {
+      if (v.frames > 1 || k.startsWith('npc/') || k.startsWith('items/icons')) {
         this.load.spritesheet(k, `${k}.png`, { frameWidth: v.frame[0], frameHeight: v.frame[1] });
       } else {
         this.load.image(k, `${k}.png`);
@@ -31,7 +31,7 @@ export class Boot extends Phaser.Scene {
       if (!k.startsWith('fx/') || v.frames <= 1) continue;
       this.anims.create({ key: k, frames: this.anims.generateFrameNumbers(k, {}), frameRate: 16, repeat: k === 'fx/cursor' || k === 'fx/piyo' || k === 'fx/curse' ? -1 : 0 });
     }
-    this.anims.create({ key: 'dice/roll', frames: this.anims.generateFrameNumbers('dice/roll', {}), frameRate: 24, repeat: -1 });
+    this.anims.create({ key: 'dice/roll-hd', frames: this.anims.generateFrameNumbers('dice/roll-hd', {}), frameRate: 20, repeat: -1 });
     for (const k of HEROES) {
       ['down', 'left', 'right', 'up'].forEach((d, row) => {
         this.anims.create({ key: `${k}_${d}`, frames: this.anims.generateFrameNumbers(k, { start: row * 4, end: row * 4 + 3 }), frameRate: 8, repeat: -1 });

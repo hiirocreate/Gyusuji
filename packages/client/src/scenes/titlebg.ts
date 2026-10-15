@@ -53,7 +53,7 @@ export class TitleBackdrop {
       const cx = o.x * T + T / 2;
       const cy = o.y * T + T / 2;
       if (NPC_OF[o.type]) s.add.sprite(cx, cy - 10, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(0.72).setDepth(o.y * 10);
-      else if (OBJ_OF[o.type]) s.add.image(cx, cy, OBJ_OF[o.type]).setScale(0.8).setDepth(o.y * 10);
+      else if (OBJ_OF[o.type]) s.add.image(cx, cy, OBJ_OF[o.type]).setDisplaySize(38, 38).setDepth(o.y * 10);
       else if (ENEMIES[o.type]) {
         const e = ENEMIES[o.type];
         s.add.sprite(cx, cy - 10, e.sprite).setScale(e.boss ? 1.15 : 0.72).setDepth(o.y * 10).play(`${e.sprite}_idle`);
@@ -114,47 +114,49 @@ export class TitleBackdrop {
     }
   }
 
-  /** 2000年代ブラウザRPG風の素朴なタイトル看板 */
+  /** カラフルな牛すじ紋章と和題を組み合わせたポップRPGロゴ */
   private makeLogo(): Phaser.GameObjects.Container {
     const s = this.scene;
     const key = 'title-logo';
     if (!s.textures.exists(key)) {
       const W = 1200;
-      const H = 300;
+      const H = 320;
       const t = s.textures.createCanvas(key, W, H)!;
       const c = t.getContext();
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       const cx = W / 2;
-      // 明るい地形の上でも読める、飾りを抑えたクリーム色の看板。
-      c.fillStyle = 'rgba(15, 31, 44, 0.45)';
-      c.fillRect(174, 43, 852, 176);
-      c.fillStyle = '#fff0bd';
-      c.fillRect(166, 34, 852, 176);
-      c.lineWidth = 8;
-      c.strokeStyle = '#203040';
-      c.strokeRect(166, 34, 852, 176);
-      c.lineWidth = 2;
-      c.strokeStyle = '#ffffff';
-      c.strokeRect(178, 46, 828, 152);
-
-      c.font = '900 132px "Arial Black", "Hiragino Kaku Gothic ProN", sans-serif';
-      const titleWidth = c.measureText('BEEF HUNTER').width;
-      if (titleWidth > 780) c.font = `900 ${Math.floor(132 * 780 / titleWidth)}px "Arial Black", "Hiragino Kaku Gothic ProN", sans-serif`;
-      c.lineJoin = 'miter';
-      c.lineWidth = 3;
-      c.strokeStyle = '#ffffff';
-      c.strokeText('BEEF HUNTER', cx, 105);
-      c.fillStyle = '#203040';
-      c.fillText('BEEF HUNTER', cx, 105);
-
-      c.font = 'bold 40px "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
-      c.fillStyle = '#365d37';
-      c.fillText('〜 す ご ろ く バ ト ル 〜', cx, 166);
+      c.fillStyle = 'rgba(14,18,42,.58)';
+      c.beginPath(); c.roundRect(96, 31, 1040, 256, 35); c.fill();
+      const gradient = c.createLinearGradient(80, 30, 80, 286);
+      gradient.addColorStop(0, '#54427d'); gradient.addColorStop(.52, '#342d58'); gradient.addColorStop(1, '#252947');
+      c.fillStyle = gradient; c.beginPath(); c.roundRect(78, 18, 1040, 256, 35); c.fill();
+      c.lineWidth = 11; c.strokeStyle = '#6e452d'; c.stroke();
+      c.lineWidth = 6; c.strokeStyle = '#ffd966'; c.stroke();
+      c.beginPath(); c.roundRect(92, 32, 1012, 228, 25); c.lineWidth = 2.5; c.strokeStyle = '#fff1c3'; c.stroke();
+      // Gold corner studs and slim enamel rules give the sign readable, layered RPG framing.
+      for (const x of [111,1085]) for (const y of [50,242]) {
+        c.beginPath(); c.arc(x,y,7,0,Math.PI*2); c.fillStyle='#ffe698'; c.fill();
+        c.beginPath(); c.arc(x-2,y-2,2.2,0,Math.PI*2); c.fillStyle='#fff9dd'; c.fill();
+      }
+      c.font = '900 106px "Arial Black", "Noto Sans JP", sans-serif';
+      c.textAlign='center'; c.lineJoin='round';
+      c.lineWidth=18; c.strokeStyle='#28243f'; c.strokeText('牛すじハンター',525,130);
+      c.lineWidth=9; c.strokeStyle='#eb6849'; c.strokeText('牛すじハンター',525,130);
+      const titleGrad=c.createLinearGradient(0,78,0,182);
+      titleGrad.addColorStop(0,'#fff9df'); titleGrad.addColorStop(.48,'#ffeba3'); titleGrad.addColorStop(1,'#ffd26a');
+      c.fillStyle=titleGrad; c.fillText('牛すじハンター',525,130);
+      c.font = '900 38px "Arial Black", sans-serif'; c.letterSpacing='5px';
+      c.fillStyle='#9ef2e3'; c.fillText('BEEF  HUNTER',525,204); c.letterSpacing='0px';
+      c.font = 'bold 31px sans-serif'; c.fillStyle='#fff9e5';
+      c.fillText('サイコロを転がして、お宝をつかめ！',525,244);
+      c.beginPath(); c.roundRect(153,52,128,32,14); c.fillStyle='#f5a83e'; c.fill();
+      c.font='bold 20px sans-serif'; c.fillStyle='#38274c'; c.fillText('冒険RPG',217,73);
       t.refresh();
     }
     const img = s.add.image(0, 0, key);
-    const ct = s.add.container(0, 0, [img]).setScrollFactor(0).setDepth(9500);
+    const crest = s.add.image(430, 10, 'brand/beef-rune').setDisplaySize(160, 160);
+    const ct = s.add.container(0, 0, [img, crest]).setScrollFactor(0).setDepth(9500);
     s.tweens.add({ targets: ct, y: '+=2', yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.easeInOut' });
     return ct;
   }
@@ -165,9 +167,9 @@ export class TitleBackdrop {
     s.cameras.main.setViewport(0, 0, L.w, L.h).setZoom(L.orient === 'port' ? 1.15 : 1);
     const zoom = s.cameras.main.zoom;
     // 画面固定オブジェクトはズームの影響を受けるので補正
-    const fit = Math.min((L.w * 0.92) / 1200, (L.h * 0.3) / 300) / zoom;
+    const fit = Math.min((L.w * 0.97) / 1200, (L.h * 0.36) / 320) / zoom;
     this.logo.setScale(fit);
-    this.logo.setPosition(L.w / 2 / zoom + (L.w / 2) * (1 - 1 / zoom), (L.orient === 'port' ? L.h * 0.2 : L.h * 0.22) / zoom + (L.h / 2) * (1 - 1 / zoom));
+    this.logo.setPosition(L.w / 2 / zoom + (L.w / 2) * (1 - 1 / zoom), (L.orient === 'port' ? L.h * 0.19 : L.h * 0.22) / zoom + (L.h / 2) * (1 - 1 / zoom));
     this.shade.clear();
     this.shade.fillStyle(0x000000, 0.35).fillRect(-L.w, -L.h, L.w * 3, L.h * 3);
   }

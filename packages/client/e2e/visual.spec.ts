@@ -42,8 +42,11 @@ for (const orient of ['land', 'port'] as const) {
         if (map === 0) await page.screenshot({ path: `e2e-out/classic_${orient}_lobby.png` });
         await page.getByText('ゲーム開始', { exact: true }).click();
         await expect(page.locator('.okbtn')).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('.okbtn')).toContainText('行動をはじめる');
         await page.locator('.okbtn').click();
         await expect(page.getByText('移動', { exact: true })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('button', { name: '画面を回転' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'ゲームを終了' })).toBeVisible();
         const geometry = await page.evaluate(() => {
           const game = (window as any).game;
           const f = game.scene.getScene('Field');
@@ -61,6 +64,32 @@ for (const orient of ['land', 'port'] as const) {
         expect(geometry.status).toEqual([360, 280]);
         expect(geometry.tiles.every(([w, h]: number[]) => w === 42 && h === 42)).toBe(true);
         await page.screenshot({ path: `e2e-out/classic_${orient}_map${map}.png` });
+        if (map === 0) {
+          // Supply a display-only test item and spy on input; rules/runner are untouched.
+          await page.evaluate(() => {
+            const f = (window as any).game.scene.getScene('Field');
+            f.view.players[0].items = [1];
+            f.host.ask = { kind: 'action', seat: 0, items: [0] };
+            (window as any).__sent = [];
+            f.host.send = (input: unknown) => (window as any).__sent.push(input);
+            f.refreshAsk(true);
+          });
+          await page.locator('#fieldui .it', { hasText: 'アイテム' }).click();
+          const apple = page.locator('#fieldui .it', { hasText: 'りんご' });
+          await apple.click();
+          await expect(page.locator('.tap-instruction')).toContainText('もう一度タップ');
+          await expect(page.locator('.confirm-tap')).toHaveCount(1);
+          expect(await page.evaluate(() => (window as any).__sent)).toEqual([]);
+          await apple.click();
+          expect(await page.evaluate(() => (window as any).__sent)).toEqual([{ type: 'useItem', slot: 0 }]);
+        }
+        const beforeRotate = await page.locator('#stage').getAttribute('data-orient');
+        await page.getByRole('button', { name: '画面を回転' }).click();
+        await expect(page.locator('#stage')).toHaveAttribute('data-orient', beforeRotate === 'land' ? 'port' : 'land');
+        await page.getByRole('button', { name: '画面を回転' }).click();
+        page.once('dialog', (dialog) => dialog.accept());
+        await page.getByRole('button', { name: 'ゲームを終了' }).click();
+        await expect(page.getByText('一人で遊ぶ', { exact: true })).toBeVisible();
         expect(errors).toEqual([]);
       });
     }

@@ -37,7 +37,13 @@ export class Menu extends Phaser.Scene {
     this.bg = new TitleBackdrop(this);
     this.bg.build();
     bgm('title');
-    this.events.once('shutdown', () => { this.offs.forEach((f) => f()); this.offs = []; screenEl().replaceChildren(); });
+    const exit = () => {
+      if (!$('chatbar') || $('chatbar').style.display !== 'flex') return;
+      net.leave();
+      this.title();
+    };
+    window.addEventListener('game-exit', exit);
+    this.events.once('shutdown', () => { window.removeEventListener('game-exit', exit); this.offs.forEach((f) => f()); this.offs = []; screenEl().replaceChildren(); });
     this.offs.push(net.started.on((host) => this.scene.start('Field', { host })));
     if (data?.to === 'wait' && net.room) this.waitNet();
     else this.title();
@@ -63,9 +69,10 @@ export class Menu extends Phaser.Scene {
     this.bg.setLogo(true);
     const foot = h('div', { class: 'tfoot' }, 'Ver 0.2　©2026 BEEF HUNTER');
     if (!this.pressed) {
-      // 「TAP TO START」→ タップでメニュー
       const go = () => { this.pressed = true; se('select'); this.title(); };
-      screenEl().replaceChildren(h('div', { class: 'titlescr', onclick: go }, h('div', { class: 'press' }, 'TAP TO START'), foot));
+      screenEl().replaceChildren(h('div', { class: 'titlescr' },
+        h('button', { type: 'button', class: 'press', 'aria-label': '冒険をはじめる', onclick: go }, '冒険をはじめる', h('span', { class: 'press-arrow' }, '▶')),
+        foot));
       return;
     }
     screenEl().replaceChildren(h('div', { class: 'titlescr' },

@@ -42,10 +42,16 @@ export class Status extends Phaser.Scene {
       if (!p) continue;
       this.layer.add(this.add.text(x + 5, y + 1, p.name.slice(0, 6), { fontSize: '12px', color: '#ffffff', fontFamily: 'Meiryo, sans-serif' }));
       this.layer.add(this.add.image(x + 4, y + 16, HEROES[p.charId], 0).setOrigin(0).setDisplaySize(44, 44));
-      this.layer.add(this.add.text(x + 94, y + 20, '歩数', { fontSize: '10px', color: '#b6c4d1', fontFamily: 'Meiryo, sans-serif' }));
-      this.layer.add(this.add.bitmapText(x + 124, y + 18, 'stat', String(Math.min(999, p.steps)).padStart(3, ' ')));
-      this.layer.add(this.add.bitmapText(x + 52, y + 36, 'stat', `H ${String(p.hp).padStart(2, ' ')} / M ${String(p.mp).padStart(2, ' ')}`));
-      this.layer.add(this.add.bitmapText(x + 106, y + 56, 'stat', `${String(p.gold).padStart(3, ' ')}G`));
+      const ui = (sx: number, sy: number, text: string, color = '#fff', size = '12px') => this.add.text(sx, sy, text,
+        { fontSize: size, color, fontFamily: 'system-ui, "Noto Sans JP", Meiryo, sans-serif', fontStyle: 'bold', stroke: '#182331', strokeThickness: 2 });
+      this.layer.add(ui(x + 93, y + 19, '歩数', '#cfdae7', '10px'));
+      this.layer.add(ui(x + 125, y + 17, String(Math.min(999, p.steps)).padStart(3, ' '), '#fff'));
+      this.layer.add(ui(x + 54, y + 38, 'HP', '#ff827b', '10px'));
+      this.layer.add(ui(x + 78, y + 36, String(p.hp), '#fff'));
+      this.layer.add(ui(x + 105, y + 38, 'MP', '#75d8ff', '10px'));
+      this.layer.add(ui(x + 130, y + 36, String(p.mp), '#fff'));
+      this.layer.add(ui(x + 54, y + 59, 'G', '#ffd877', '10px'));
+      this.layer.add(ui(x + 68, y + 57, String(p.gold), '#fff'));
       // アイテム欄：参考図に合わせ (10,82) から枠30×26・ピッチ32×28（所持金の数字と重ならない）
       const box = this.add.graphics().lineStyle(1, 0x627181, 1);
       this.layer.add(box);
@@ -55,7 +61,7 @@ export class Status extends Phaser.Scene {
         box.fillStyle(0x10212d, p && i === turn ? 0.35 : 0.55).fillRect(ix + 1, iy + 1, 28, 24);
         box.strokeRect(ix + 0.5, iy + 0.5, 29, 25);
         const id = p.items[k];
-        if (id) this.layer.add(this.add.image(ix + 15, iy + 13, 'items/icons', id - 1).setDisplaySize(26, 26));
+        if (id) this.layer.add(this.add.image(ix + 15, iy + 13, 'items/icons-hd', id - 1).setDisplaySize(26, 26));
       }
     }
   }

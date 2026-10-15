@@ -372,5 +372,94 @@
    40
   ],
   "frames": 1
+ },
+ "items/icons-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 25,
+  "note": "High-resolution clear-silhouette icon atlas; order matches item numbers 1–25"
+ },
+ "dice/faces-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 6,
+  "note": "High-resolution simplified one-to-six dice"
+ },
+ "dice/roll-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 8,
+  "note": "High-resolution tumbling dice frames"
+ },
+ "obj/chest-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1
+ },
+ "obj/chest_open-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1
+ },
+ "obj/qbox-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1
+ },
+ "obj/tack-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1
+ },
+ "obj/tack_big-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1
+ },
+ "obj/gold_small-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1
+ },
+ "obj/gold_large-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1
+ },
+ "brand/beef-rune": {
+  "frame": [
+   512,
+   512
+  ],
+  "frames": 1,
+  "note": "Transparent game-title beef emblem"
+ },
+ "dice/ichi-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 1,
+  "note": "High-resolution special guaranteed-one gold die"
  }
 }

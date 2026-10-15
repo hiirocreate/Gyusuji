@@ -14,6 +14,7 @@ import type { Overlay } from './Overlay.js';
 import type { Status } from './Status.js';
 import { fieldCam, frames, tween, wait } from './fieldcam.js';
 import { drawShoreline, pathTexture, terrainTexture } from './classicTerrain.js';
+import { itemHint } from '../itemHints.js';
 
 const T = C.TILE;
 /** キャラの描画位置はマス中心から上へ10px（SQU_CHR_OFFS_Y） */
@@ -40,6 +41,8 @@ export class Field extends Phaser.Scene {
   private tracker!: Tracker;
   private shownAsk = '';
   private streamedAsk = '';
+  private pendingItemSlot: number | null = null;
+  private pendingOptionIndex: number | null = null;
   private offs: (() => void)[] = [];
   private actor = 0;
   private hpWin: HTMLElement | null = null;
@@ -80,6 +83,12 @@ export class Field extends Phaser.Scene {
     buildChatBar();
     $('chatbar').style.display = 'flex';
     setSender(host.kind === 'online' ? (t, c) => host.sendChat(t, c) : null);
+    const exitGame = () => {
+      closeLog();
+      if (host.kind === 'online') net.leave();
+      this.scene.start('Menu');
+    };
+    window.addEventListener('game-exit', exitGame);
 
     this.offs = [
       host.batch.on((b) => { this.queue.push(b); void this.pump(); }),
@@ -88,6 +97,7 @@ export class Field extends Phaser.Scene {
       onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); })),
     ];
     this.events.once('shutdown', () => {
+      window.removeEventListener('game-exit', exitGame);
       this.offs.forEach((f) => f());
       fieldUI().replaceChildren();
       closeLog();
@@ -152,7 +162,7 @@ export class Field extends Phaser.Scene {
       const cy = o.y * T + T / 2;
       let s: Phaser.GameObjects.Sprite | null = null;
       if (NPC_OF[o.type]) s = this.add.sprite(cx, cy + CHR_OFFS_Y, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(HERO_SCALE);
-      else if (OBJ_OF[o.type]) s = this.add.sprite(cx, cy, OBJ_OF[o.type]).setScale(0.8);
+      else if (OBJ_OF[o.type]) s = this.add.sprite(cx, cy, OBJ_OF[o.type]).setDisplaySize(38, 38);
       else if (ENEMIES[o.type]) {
         const e = ENEMIES[o.type];
         s = this.add.sprite(cx, cy + CHR_OFFS_Y, e.sprite).setScale(e.boss ? 1.15 : HERO_SCALE).play(`${e.sprite}_idle`);
@@ -234,10 +244,23 @@ export class Field extends Phaser.Scene {
     this.descWin = null;
     if (!it?.desc) return;
     this.descWin = this.addWin(centerWin(140, 240, h('div', {}, it.label), h('div', { style: 'font-size:12px' }, it.desc)));
+    // Keep the hint visible while allowing the second tap to reach the highlighted row beneath it.
+    this.descWin.style.pointerEvents = 'none';
+  }
+
+  private showItemHint(id: number, label: string, use = false) {
+    this.showDesc({ label, desc: itemHint(id) });
+    if (use) this.descWin?.append(h('div', { class: 'tap-instruction' }, '同じアイテムをもう一度タップすると使います'));
+  }
+
+  private showActionHint(label: string, hint: string, action: string) {
+    this.showDesc({ label, desc: hint });
+    this.descWin?.append(h('div', { class: 'tap-instruction' }, `もう一度タップすると${action}`));
   }
 
   private gotWin(icon: number | null, text: string) {
     const el = centerWin(140, 140, icon ? h('span', { style: `${iconStyle(icon)};vertical-align:middle;margin-right:6px` }) : null, text);
+    if (icon) el.querySelector('span')?.classList.add('win-icon');
     fieldUI().append(el);
     this.time.delayedCall(frames(30), () => el.remove());
   }
@@ -247,6 +270,10 @@ export class Field extends Phaser.Scene {
     const ask = this.host.ask;
     const key = JSON.stringify(ask);
     if (!force && key === this.shownAsk) return;
+    if (key !== this.shownAsk) {
+      this.pendingOptionIndex = null;
+      this.pendingItemSlot = null;
+    }
     this.shownAsk = key;
     this.clearWins();
     this.showDesc(null);
@@ -265,6 +292,8 @@ export class Field extends Phaser.Scene {
     closeLog(); // 手番が来たらログは自動で閉じる
     const send = (inp: Parameters<Host['send']>[0]) => {
       se('select');
+      this.pendingOptionIndex = null;
+      this.pendingItemSlot = null;
       this.clearWins();
       this.showDesc(null);
       this.host.send(inp);
@@ -274,33 +303,63 @@ export class Field extends Phaser.Scene {
       this.lookAt(ask.seat);
       this.addWin(menuWin([
         { label: '移動', on: () => send({ type: 'roll' }) },
-        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, ask.seat, (slot) => send({ type: 'useItem', slot })) },
       ], 'left:16px;top:16px'));
     } else if (ask.kind === 'battle') {
       this.addWin(menuWin([
         { label: 'たたかう', on: () => send({ type: 'battleAttack' }) },
-        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, ask.seat, (slot) => send({ type: 'useItem', slot })) },
       ], 'left:16px;top:200px'));
     } else {
-      const win = this.addWin(menuWin(ask.options.map((o, i) => ({
+      const needsTwoTaps = (i: number) => {
+        const o = ask.options[i];
+        const treasure = ask.sub === 'treasure' && o.label.includes('開ける');
+        const item = !!o.value && !!ITEMS[o.value] && ['shop', 'smith', 'shoes', 'qbox'].includes(ask.sub);
+        return !o.disabled && (item || treasure);
+      };
+      const rows = ask.options.map((o, i) => ({
         label: o.label, disabled: o.disabled,
-        icon: o.value && ITEMS[o.value] ? iconStyle(o.value) : undefined,
-        desc: o.value && ITEMS[o.value] ? ITEMS[o.value].desc : undefined,
-        on: () => send({ type: 'select', index: i }),
-      })), 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+        icon: needsTwoTaps(i) ? iconStyle(o.value!) : undefined,
+        desc: needsTwoTaps(i) ? itemHint(o.value!) : undefined,
+        on: () => {
+          if (needsTwoTaps(i) && this.pendingOptionIndex !== i) {
+            this.pendingOptionIndex = i;
+            win.querySelectorAll('.it').forEach((el) => el.classList.remove('confirm-tap'));
+            win.querySelectorAll('.it')[i]?.classList.add('confirm-tap');
+            if (o.value && ITEMS[o.value]) this.showItemHint(o.value, o.label, true);
+            else this.showActionHint(o.label, '中には思いがけないお宝が入っているかも。', '宝箱を開けます');
+            return;
+          }
+          send({ type: 'select', index: i });
+        },
+      }));
+      const win = this.addWin(menuWin(rows, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+      if (this.pendingOptionIndex !== null) win.querySelectorAll('.it')[this.pendingOptionIndex]?.classList.add('confirm-tap');
       // 問いかけ文は対象プレイヤーのウィンドウ先頭に表示（流さない）
       win.prepend(h('div', { style: 'padding:0 11px;line-height:22px;color:#ffe650;white-space:normal;max-width:240px' }, ask.title));
     }
   }
 
-  private itemList(p: PublicPlayer, usable: number[], onUse: (slot: number) => void) {
+  private itemList(p: PublicPlayer, usable: number[], seat: number, onUse: (slot: number) => void) {
     this.clearWins();
     const items: MenuItem[] = p.items.map((id, slot) => ({
       label: ITEMS[id].name + (ITEMS[id].mp ? `（MP${ITEMS[id].mp}）` : ''),
-      icon: iconStyle(id), desc: ITEMS[id].desc, disabled: !usable.includes(slot), on: () => onUse(slot),
+      icon: iconStyle(id), desc: itemHint(id), disabled: !usable.includes(slot), on: () => {
+        if (this.pendingItemSlot !== slot) {
+          this.pendingItemSlot = slot;
+          win.querySelectorAll('.it').forEach((el) => el.classList.remove('confirm-tap'));
+          win.querySelectorAll('.it')[slot]?.classList.add('confirm-tap');
+          this.showItemHint(id, ITEMS[id].name, true);
+          return;
+        }
+        this.pendingItemSlot = null;
+        this.overlay.itemUse(id, this.heroes[seat].x, this.heroes[seat].y - 12);
+        onUse(slot);
+      },
     }));
-    items.push({ label: 'もどる', on: () => this.refreshAsk(true) });
-    this.addWin(menuWin(items, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+    items.push({ label: 'もどる', on: () => { this.pendingItemSlot = null; this.refreshAsk(true); } });
+    const win = this.addWin(menuWin(items, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+    if (this.pendingItemSlot !== null) win.querySelectorAll('.it')[this.pendingItemSlot]?.classList.add('confirm-tap');
   }
 
   private tickTimer() {
@@ -405,7 +464,7 @@ export class Field extends Phaser.Scene {
         this.status.draw(this.view, e.seat);
         this.lookAt(e.seat);
         if (this.host.mySeats.has(e.seat)) {
-          // 該当プレイヤーにはポップアップ。〇を押して閉じる
+          // 自分の手番は明確な行動開始ボタンで知らせる。
           system(`${this.name(e.seat)}の番です`);
           se('turn');
           await this.turnPopup(`${this.name(e.seat)}の番です`);
@@ -436,6 +495,7 @@ export class Field extends Phaser.Scene {
           // 1マス 5 フレームの直線補間
           await tween(this, { targets: s, x: c.x * T + T / 2, y: c.y * T + T / 2 + CHR_OFFS_Y, duration: frames(5) });
           this.shadows[seat].setPosition(s.x, s.y - CHR_OFFS_Y + 8);
+          this.overlay.stepFx(s.x, s.y + 10);
           s.setDepth(this.depthOf(c.y, 6));
           se('step');
           px = c.x;
@@ -487,7 +547,7 @@ export class Field extends Phaser.Scene {
         return;
       }
       case 'chestOpen':
-        this.objSprites[e.idx]?.setTexture('obj/chest_open');
+        this.objSprites[e.idx]?.setTexture('obj/chest_open-hd');
         await wait(this, frames(8));
         return;
       case 'fx': {
@@ -620,7 +680,7 @@ export class Field extends Phaser.Scene {
         h('div', { style: 'font-size:16px;margin-bottom:6px;text-align:center' }, text),
         h('div', { style: 'text-align:center' }, h('button', {
           class: 'okbtn', onclick: () => { se('select'); close(); },
-        }, '〇')));
+        }, h('span', { class: 'turn-play-icon' }, '▶'), ' 行動をはじめる')));
       el.classList.add('turnpop');
       fieldUI().append(el);
     });

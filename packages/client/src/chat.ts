@@ -1,5 +1,5 @@
 import { CHAT_COLORS, CHAT_MAX, SYSTEM_COLOR } from '@gyusuji/shared';
-import { layout, onLayout } from './layout.js';
+import { layout, onLayout, toggleOrientation } from './layout.js';
 import { store, update } from './store.js';
 import { h } from './ui.js';
 
@@ -145,7 +145,7 @@ export function buildChatBar(): void {
     update((s) => (s.chatColor = (s.chatColor + 1) % CHAT_COLORS.length));
     colorBtn.style.background = CHAT_COLORS[store().chatColor];
   };
-  const input = h('input', { placeholder: 'メッセージを入力', maxLength: CHAT_MAX, style: `width:${L.input}px` });
+  const input = h('input', { placeholder: 'メッセージを入力', maxLength: CHAT_MAX, style: `width:${Math.max(92, L.input - 82)}px` });
   const send = () => {
     const t = input.value.trim().slice(0, CHAT_MAX);
     if (!t) return;
@@ -157,7 +157,11 @@ export function buildChatBar(): void {
   bar.replaceChildren(
     colorBtn, input,
     h('button', { class: 'cbtn', style: 'background:#5050c8', onclick: send }, '送信'),
-    h('button', { class: 'cbtn', style: 'background:#555', onclick: () => toggleLog() }, 'ログ'));
+    h('button', { class: 'cbtn', style: 'background:#555', onclick: () => toggleLog() }, 'ログ'),
+    h('button', { class: 'toolbtn rotate-btn', title: '画面の向きを切り替える', 'aria-label': '画面を回転', onclick: () => toggleOrientation() }, '↻'),
+    h('button', { class: 'toolbtn exit-btn', title: 'ゲームを終了してタイトルに戻る', 'aria-label': 'ゲームを終了', onclick: () => {
+      if (window.confirm('現在の待機・対局を終了して、タイトルへ戻りますか？')) window.dispatchEvent(new Event('game-exit'));
+    } }, '終了'));
 }
 
 onLayout(() => {
