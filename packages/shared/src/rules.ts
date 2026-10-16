@@ -554,6 +554,7 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
       const it = p.items[inp.slot];
       const d = ITEMS[it.id];
       g.msg(`${p.name}は${d.name}を使った！`, p.seat);
+      g.emit({ t: 'itemUse', seat: p.seat, item: it.id });
       if (d.kind === 'magic') p.mp -= d.mp ?? 0;
       else removeSlot(g, p, inp.slot, false);
       switch (it.id) {
@@ -646,6 +647,7 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
   const it = p.items[slot];
   const d = ITEMS[it.id];
   g.msg(`${p.name}は${d.name}を使った！`, p.seat);
+  g.emit({ t: 'itemUse', seat: p.seat, item: it.id });
   if (d.kind === 'magic') p.mp -= d.mp ?? 0;
   else removeSlot(g, p, slot, false);
   switch (it.id) {

@@ -47,6 +47,7 @@ export class Field extends Phaser.Scene {
   private actor = 0;
   private hpWin: HTMLElement | null = null;
   private timerWin: HTMLElement | null = null;
+  private pendingRespawn: { seat: number; x: number; y: number; dir: PublicPlayer['dir'] } | null = null;
 
   constructor() {
     super('Field');
@@ -58,6 +59,7 @@ export class Field extends Phaser.Scene {
     this.busy = false;
     this.shownAsk = '';
     this.streamedAsk = '';
+    this.pendingRespawn = null;
   }
 
   create() {
@@ -94,6 +96,7 @@ export class Field extends Phaser.Scene {
       host.batch.on((b) => { this.queue.push(b); void this.pump(); }),
       host.askChanged.on(() => this.refreshAsk(true)),
       host.kind === 'online' ? host.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })) : () => {},
+      host.kind === 'online' ? net.started.on((next) => this.scene.restart({ host: next })) : () => {},
       onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); this.positionDesc(); })),
     ];
     this.events.once('shutdown', () => {
@@ -189,6 +192,7 @@ export class Field extends Phaser.Scene {
     this.heroes[seat].setPosition(px, py + CHR_OFFS_Y);
     this.shadows[seat].setPosition(px, py + 8);
     this.restack();
+    this.syncMarks(seat);
   }
 
   /** 手番キャラは同じマスでも一番手前 */
@@ -273,11 +277,12 @@ export class Field extends Phaser.Scene {
     this.descWin?.append(h('div', { class: 'tap-instruction' }, `もう一度タップすると${action}`));
   }
 
-  private gotWin(icon: number | null, text: string) {
+  private gotWin(icon: number | null, text: string, durationMs = 1500) {
     const el = centerWin(140, 140, icon ? h('span', { style: `${iconStyle(icon)};vertical-align:middle;margin-right:6px` }) : null, text);
+    el.classList.add('notice-window');
     if (icon) el.querySelector('span')?.classList.add('win-icon');
     fieldUI().append(el);
-    this.time.delayedCall(frames(30), () => el.remove());
+    this.time.delayedCall(durationMs, () => el.remove());
   }
 
   private refreshAsk(force = false) {
@@ -436,11 +441,21 @@ export class Field extends Phaser.Scene {
 
   private setMarks(p: PublicPlayer) {
     const list = this.marks[p.seat];
-    list.forEach((m) => m.destroy());
-    list.length = 0;
     const s = this.heroes[p.seat];
-    if (p.stun > 0) list.push(this.add.sprite(s.x, s.y - 22, 'fx/piyo').play('fx/piyo').setScale(0.5).setDepth(99999));
-    if (p.cursed) list.push(this.add.sprite(s.x + 10, s.y - 18, 'fx/curse').play('fx/curse').setScale(0.35).setDepth(99999));
+    const sync = (texture: string, active: boolean, x: number, y: number, scale: number) => {
+      const index = list.findIndex((mark) => mark.texture.key === texture);
+      if (!active) {
+        if (index >= 0) list.splice(index, 1)[0].destroy();
+        return;
+      }
+      if (index >= 0) {
+        list[index].setPosition(x, y).setDepth(99999).setScale(scale);
+        return;
+      }
+      list.push(this.add.sprite(x, y, texture).play(texture).setScale(scale).setDepth(99999));
+    };
+    sync('fx/piyo', p.stun > 0, s.x, s.y - 22, 0.5);
+    sync('fx/curse', p.cursed, s.x + 10, s.y - 18, 0.35);
   }
 
   private syncMarks(seat: number) {
@@ -562,8 +577,12 @@ export class Field extends Phaser.Scene {
       case 'getItem':
         se('get');
         system(`${this.name(e.seat)}は${ITEMS[e.item].name}を手に入れた！`);
-        if (this.host.mySeats.has(e.seat)) this.gotWin(e.item, `${ITEMS[e.item].name}を手に入れた！`);
-        await wait(this, frames(10));
+        this.gotWin(e.item, `${this.name(e.seat)}は${ITEMS[e.item].name}を手に入れた！`);
+        await wait(this, 1500);
+        return;
+      case 'itemUse':
+        this.gotWin(e.item, `${this.name(e.seat)}は${ITEMS[e.item].name}を使った！`);
+        await wait(this, 1500);
         return;
       case 'loseItem':
         return;
@@ -617,6 +636,11 @@ export class Field extends Phaser.Scene {
         this.hpWin = null;
         this.view = { ...this.view, battle: null };
         bgm('field');
+        if (this.pendingRespawn) {
+          const r = this.pendingRespawn;
+          this.pendingRespawn = null;
+          await this.animateRespawn(r.seat, r);
+        }
         return;
       case 'death':
         se('lose');
@@ -627,15 +651,13 @@ export class Field extends Phaser.Scene {
         await wait(this, frames(10));
         return;
       case 'respawn': {
-        const r = end.players[e.seat]?.respawn;
-        if (r) {
-          this.placeHero(e.seat, r.x, r.y);
-          this.heroes[e.seat].setAlpha(1).setAngle(0);
-          se('warp');
-          this.lookAt(e.seat);
-          this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
-        }
-        await wait(this, frames(10));
+        const player = end.players[e.seat];
+        if (!player) return;
+        this.setMarks(player);
+        const r = player.respawn;
+        const target = { seat: e.seat, x: r.x, y: r.y, dir: r.dir };
+        if (inBattle) this.pendingRespawn = target;
+        else await this.animateRespawn(e.seat, target);
         return;
       }
       case 'warp': {
@@ -712,23 +734,58 @@ export class Field extends Phaser.Scene {
     });
   }
 
+  private async animateRespawn(seat: number, target: { x: number; y: number; dir: PublicPlayer['dir'] }) {
+    const hero = this.heroes[seat];
+    if (!hero) return;
+    const x = target.x * T + T / 2;
+    const y = target.y * T + T / 2 + CHR_OFFS_Y;
+    const dx = x - hero.x;
+    const dy = y - hero.y;
+    const direction = Math.abs(dx) > Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+    this.lookAt(seat);
+    this.faceHero(seat, direction, true);
+    hero.setVisible(true).setAlpha(0.35).setAngle(0);
+    se('warp');
+    this.fxAt('warp', hero.x, hero.y);
+    await tween(this, {
+      targets: hero, x, y, alpha: 1, angle: 0, duration: frames(24), ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        this.shadows[seat].setPosition(hero.x, hero.y - CHR_OFFS_Y + 8);
+        this.syncMarks(seat);
+        this.restack();
+      },
+    });
+    hero.stop();
+    this.faceHero(seat, target.dir, false);
+    this.placeHero(seat, target.x, target.y);
+    this.fxAt('warp', hero.x, hero.y);
+    await wait(this, frames(8));
+  }
+
   /** 結果（UI_LAYOUT §5）：閉じるとゲーム終了 */
   private result(winner: number) {
     const close = () => {
       if (this.host.kind === 'online') net.leave();
       this.scene.start('Menu');
     };
-    const items: MenuItem[] = [{ label: '閉じる', on: close }];
-    if (this.host.kind === 'online') items.unshift({ label: 'リマッチ', on: () => net.send('rematch') });
-    items.unshift({
-      label: 'リプレイ保存', on: async () => {
+    const actions: HTMLElement[] = [];
+    if (this.host.kind === 'online') {
+      const rematch = h('button', { type: 'button', class: 'result-action', onclick: () => {
+        if (rematch.disabled) return;
+        rematch.disabled = true;
+        rematch.textContent = '相手の再戦を待っています…';
+        net.send('rematch');
+      } }, 'リマッチ');
+      actions.push(rematch);
+    }
+    actions.push(h('button', { type: 'button', class: 'result-action', onclick: async () => {
         const d = await this.host.replayData();
         if (d) h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })), download: `beefhunter_replay_${Date.now()}.json` }).click();
-      },
-    });
-    $('overlay').append(h('div', { class: 'win', style: 'left:50%;top:40%;transform:translate(-50%,-50%);padding:10px 14px;text-align:center' },
-      h('div', { style: 'font-size:16px' }, `優勝者は ${this.name(winner)} さんです！`),
-      h('div', { style: 'font-size:12px;margin:4px 0' }, 'このウィンドウを閉じるとゲームを終了します'),
-      menuWin(items, 'position:static;border:0')));
+      } }, 'リプレイ保存'));
+    actions.push(h('button', { type: 'button', class: 'result-action', onclick: close }, '閉じる'));
+    $('overlay').append(h('div', { class: 'win result-window', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'ゲーム結果' },
+      h('div', { class: 'result-title' }, `優勝者は ${this.name(winner)} さんです！`),
+      h('div', { class: 'result-copy' }, 'このウィンドウを閉じるとゲームを終了します'),
+      h('div', { class: 'result-actions' }, ...actions)));
   }
 }
