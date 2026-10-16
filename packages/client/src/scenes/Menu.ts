@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { C, CHARS, DEFAULT_SETTINGS } from '@gyusuji/shared';
+import { C, CHARS, DEFAULT_SETTINGS, MAP_NAMES } from '@gyusuji/shared';
 import type { SeatInit, Settings } from '@gyusuji/shared';
 import { ACHIEVEMENTS } from '../achievements.js';
 import { bgm, se } from '../audio.js';
@@ -8,6 +8,7 @@ import { settingsForm } from '../forms.js';
 import { LocalHost, ReplayHost, net, type ReplayData } from '../net.js';
 import { store, update } from '../store.js';
 import { $, h, menuWin, screenEl, type MenuItem } from '../ui.js';
+import { HEROES } from '../assets.js';
 import { TitleBackdrop } from './titlebg.js';
 
 type Mode = 'solo' | 'net';
@@ -36,7 +37,13 @@ export class Menu extends Phaser.Scene {
     this.bg = new TitleBackdrop(this);
     this.bg.build();
     bgm('title');
-    this.events.once('shutdown', () => { this.offs.forEach((f) => f()); this.offs = []; screenEl().replaceChildren(); });
+    const exit = () => {
+      if (!$('chatbar') || $('chatbar').style.display !== 'flex') return;
+      net.leave();
+      this.title();
+    };
+    window.addEventListener('game-exit', exit);
+    this.events.once('shutdown', () => { window.removeEventListener('game-exit', exit); this.offs.forEach((f) => f()); this.offs = []; screenEl().replaceChildren(); });
     this.offs.push(net.started.on((host) => this.scene.start('Field', { host })));
     if (data?.to === 'wait' && net.room) this.waitNet();
     else this.title();
@@ -44,11 +51,17 @@ export class Menu extends Phaser.Scene {
 
   private show(...els: (HTMLElement | null | false)[]) {
     this.bg?.setLogo(false);
-    screenEl().replaceChildren(h('div', { class: 'full' }, ...els.filter(Boolean) as HTMLElement[]));
+    const contents = els.filter(Boolean) as HTMLElement[];
+    // 以降の各画面は同じ小さな紺の見出し窓を使う。
+    contents[0]?.classList.add('menu-heading', 'win');
+    const chatVisible = $('chatbar').style.display === 'flex';
+    screenEl().replaceChildren(h('div', { class: `full menu-full${chatVisible ? ' chat-visible' : ''}` }, ...contents));
   }
 
-  private list(items: MenuItem[]) {
-    return menuWin(items.map((it) => ({ ...it, on: () => { se('select'); it.on?.(); } })), 'min-width:200px');
+  private list(items: MenuItem[], style = 'min-width:200px') {
+    const list = menuWin(items.map((it) => ({ ...it, on: () => { se('select'); it.on?.(); } })), style);
+    list.classList.add('menu-list');
+    return list;
   }
 
   title() {
@@ -56,24 +69,25 @@ export class Menu extends Phaser.Scene {
     this.bg.setLogo(true);
     const foot = h('div', { class: 'tfoot' }, 'Ver 0.2　©2026 BEEF HUNTER');
     if (!this.pressed) {
-      // 「TAP TO START」→ タップでメニュー
       const go = () => { this.pressed = true; se('select'); this.title(); };
-      screenEl().replaceChildren(h('div', { class: 'titlescr', onclick: go }, h('div', { class: 'press' }, 'TAP TO START'), foot));
+      screenEl().replaceChildren(h('div', { class: 'titlescr' },
+        h('button', { type: 'button', class: 'press', 'aria-label': '冒険をはじめる', onclick: go }, '冒険をはじめる', h('span', { class: 'press-arrow' }, '▶')),
+        foot));
       return;
     }
     screenEl().replaceChildren(h('div', { class: 'titlescr' },
-      menuWin([
+      this.list([
         { label: '一人で遊ぶ', on: () => { this.mode = 'solo'; this.name(); } },
         { label: 'ネット対戦をする', on: () => { this.mode = 'net'; this.name(); } },
         { label: '設定', on: () => this.options() },
         { label: '戦績・実績', on: () => this.records() },
         { label: 'リプレイ再生', on: () => this.loadReplay() },
-      ].map((it) => ({ ...it, on: () => { se('select'); it.on(); } })), 'min-width:180px'),
+      ], 'min-width:180px'),
       foot));
   }
 
   name() {
-    const input = h('input', { value: store().name, maxLength: C.NAME_MAX, placeholder: '6文字まで' });
+    const input = h('input', { class: 'menu-input', value: store().name, maxLength: C.NAME_MAX, placeholder: '6文字まで' });
     const ok = () => {
       const v = input.value.trim().slice(0, C.NAME_MAX);
       if (!v) return input.focus();
@@ -82,7 +96,7 @@ export class Menu extends Phaser.Scene {
       else this.chars();
     };
     input.addEventListener('keydown', (e) => e.key === 'Enter' && ok());
-    this.show(h('div', {}, '名前を入力してください'), input, this.list([{ label: '決定', on: ok }, { label: 'もどる', on: () => this.title() }]));
+    this.show(h('div', {}, '名前を入力してください'), h('div', { class: 'win menu-form' }, input), this.list([{ label: '決定', on: ok }, { label: 'もどる', on: () => this.title() }]));
   }
 
   async rooms() {
@@ -126,18 +140,25 @@ export class Menu extends Phaser.Scene {
   }
 
   chars() {
-    const items: MenuItem[] = CHARS.map((c) => ({
-      label: `${c.name}（${c.role}）　HP${stars(c.stars.hp)} MP${stars(c.stars.mp)} 運${stars(c.stars.luck)}`,
-      on: () => {
+    const rows = CHARS.map((c) => {
+      const choose = () => {
         this.charId = c.id;
         if (this.mode === 'net') {
           net.send('setChar', { id: c.id });
           this.waitNet();
         } else this.waitSolo();
-      },
-    }));
-    items.push({ label: 'もどる', on: () => { if (this.mode === 'net') net.leave(); this.title(); } });
-    this.show(h('div', {}, 'キャラクターを選んでください'), this.list(items));
+      };
+      const row = h('div', { class: 'it char-it', tabindex: 0 },
+        h('span', { class: 'hero-thumb', style: `background:url(./assets/img/chars/${HEROES[c.id]}.png) 0 0 / 144px 144px no-repeat` }),
+        h('span', { class: 'char-name' }, `${c.name}（${c.role}）`),
+        h('span', { class: 'char-stats stars' }, `　HP${stars(c.stars.hp)} MP${stars(c.stars.mp)} 運${stars(c.stars.luck)}`));
+      row.addEventListener('click', () => { se('select'); choose(); });
+      return row;
+    });
+    const back = h('div', { class: 'it', tabindex: 0 }, 'もどる');
+    back.addEventListener('click', () => { se('select'); if (this.mode === 'net') net.leave(); this.title(); });
+    this.show(h('div', {}, 'キャラクターを選んでください'),
+      h('div', { class: 'win list char-list', style: 'width:340px;max-width:calc(100% - 20px)' }, ...rows, back));
   }
 
   private chatOn(local: boolean) {
@@ -182,12 +203,13 @@ export class Menu extends Phaser.Scene {
         { label: mine?.ready ? 'ゲーム開始（取り消す）' : 'ゲーム開始', on: () => net.send('ready', { on: !mine?.ready }) },
       ];
       if (isHost) {
+        items.push({ label: `マップ選択：${MAP_NAMES[st.settings.map]}`, on: () => this.netMapPicker(st.settings.map) });
         seats.forEach((s, i) => s.kind !== 'human' && items.push({ label: `席${i + 1}：CPUを${s.kind === 'cpu' ? '外す' : '追加'}`, on: () => net.send('setCpu', { seat: i, on: s.kind !== 'cpu' }) }));
         items.push({ label: 'ハウスルール', on: () => this.houseRules({ ...st.settings }, true, (p) => net.send('setSettings', p)) });
       }
       items.push({ label: 'キャラを選び直す', on: () => this.chars() }, { label: '退室', on: () => { net.leave(); this.title(); } });
       this.show(
-        h('div', {}, '参加者（4人揃うか全員が「ゲーム開始」を押すと始まります）'),
+        h('div', {}, `マップ：${MAP_NAMES[st.settings.map]}　｜　参加者（4人揃うか全員が「ゲーム開始」を押すと始まります）`),
         h('div', { class: 'win list', style: 'min-width:260px' }, ...seats.map((s, i) => h('div', { class: 'it off', style: 'color:#fff' },
           s.kind === 'empty' ? `席${i + 1}　（空き）` : `席${i + 1}　${s.name}${s.kind === 'cpu' ? '' : `（${CHARS[s.charId].role}）`}${s.kind === 'human' && s.ready ? '　準備OK' : ''}${i === st.host ? '　★' : ''}`))),
         this.list(items));
@@ -195,6 +217,19 @@ export class Menu extends Phaser.Scene {
     this.offs.push(net.changed.on(draw));
     this.offs.push(net.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })));
     draw();
+  }
+
+  private netMapPicker(current: Settings['map']) {
+    const maps: Settings['map'][] = [0, 1, 2];
+    const items: MenuItem[] = maps.map((id) => ({
+      label: `${id === current ? '✓ ' : ''}${MAP_NAMES[id]}${id === 0 ? '（標準）' : id === 1 ? '（コンパクト）' : '（じっくり冒険）'}`,
+      on: () => {
+        net.send('setMap', { id });
+        this.waitNet();
+      },
+    }));
+    this.show(h('div', {}, '対戦するマップを選んでください'), this.list(items, 'min-width:240px'),
+      this.list([{ label: 'ロビーへ戻る', on: () => this.waitNet() }], 'min-width:180px'));
   }
 
   private houseRules(s: Settings, editable: boolean, onChange: (p: Partial<Settings>) => void) {

@@ -36,15 +36,33 @@ export const LAYOUTS: Record<Orient, Layout> = {
 };
 
 let cur: Layout = LAYOUTS.land;
+let forcedOrient: Orient | null = null;
+let initialized = false;
 const listeners = new Set<(l: Layout) => void>();
 
 export const layout = () => cur;
 
-/** 横幅 > 縦幅 なら横画面（URL の ?orient=land|port で固定可：確認用） */
+function defaultOrientation(): Orient {
+  const ua = navigator.userAgent;
+  const mobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)
+    || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  return mobile ? 'port' : 'land';
+}
+
+/** 初回はPCなら横・スマートフォンなら縦。以降は画面比率に追従（URLで固定可） */
 function detect(): Orient {
+  if (forcedOrient) return forcedOrient;
   const q = new URLSearchParams(location.search).get('orient');
   if (q === 'land' || q === 'port') return q;
+  if (!initialized) return defaultOrientation();
   return window.innerWidth > window.innerHeight ? 'land' : 'port';
+}
+
+/** ボタンから縦横レイアウトを切り替える。ゲーム状態と通信には触れない。 */
+export function toggleOrientation(): Orient {
+  forcedOrient = cur.orient === 'land' ? 'port' : 'land';
+  applyLayout();
+  return cur.orient;
 }
 
 function safeInsets() {
@@ -61,6 +79,7 @@ export const stageScale = () => scaleV;
 
 export function applyLayout(): void {
   const o = detect();
+  initialized = true;
   const changed = o !== cur.orient;
   cur = LAYOUTS[o];
   const stage = document.getElementById('stage')!;
@@ -73,10 +92,22 @@ export function applyLayout(): void {
   const ins = safeInsets();
   const aw = vw - ins.l - ins.r;
   const ah = vh - ins.t - ins.b;
-  scaleV = Math.min(aw / cur.w, ah / cur.h);
-  const x = ins.l + (aw - cur.w * scaleV) / 2;
-  const y = ins.t + (ah - cur.h * scaleV) / 2;
-  stage.style.transform = `translate(${x}px, ${y}px) scale(${scaleV})`;
+  const rotateStage = (aw / ah > 1) !== (cur.w / cur.h > 1);
+  if (rotateStage) {
+    scaleV = Math.min(aw / cur.h, ah / cur.w);
+    const x = ins.l + (aw - cur.h * scaleV) / 2;
+    const y = ins.t + (ah - cur.w * scaleV) / 2;
+    stage.dataset.rotated = 'true';
+    stage.style.transform = cur.orient === 'land'
+      ? `translate(${x}px, ${y}px) rotate(90deg) scale(${scaleV}) translateY(-${cur.h}px)`
+      : `translate(${x}px, ${y}px) rotate(-90deg) scale(${scaleV}) translateX(-${cur.w}px)`;
+  } else {
+    scaleV = Math.min(aw / cur.w, ah / cur.h);
+    const x = ins.l + (aw - cur.w * scaleV) / 2;
+    const y = ins.t + (ah - cur.h * scaleV) / 2;
+    delete stage.dataset.rotated;
+    stage.style.transform = `translate(${x}px, ${y}px) scale(${scaleV})`;
+  }
   const f = cur.field;
   const fu = document.getElementById('fieldui')!;
   fu.style.left = `${f.x}px`;

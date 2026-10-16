@@ -19,7 +19,10 @@ export class Battle extends Phaser.Scene {
 
   create() {
     fieldCam(this);
-    this.add.rectangle(140, 140, 280, 280, 0x1c1e34);
+    this.add.rectangle(140, 140, 280, 280, 0x203040);
+    // 紺の静かな背景。敵・プレイヤー・コマンドの座標は従来どおり。
+    this.add.rectangle(140, 218, 280, 124, 0x1a2938);
+    this.add.graphics().lineStyle(1, 0x6e8293, 0.4).strokeRect(0.5, 0.5, 279, 279);
     this.add.ellipse(80, 104, 90, 22, 0x000000, 0.35);
     this.add.ellipse(200, 222, 60, 16, 0x000000, 0.35);
     this.enemy = this.add.sprite(80, 80, 'enemy_slime').setScale(1.5);
