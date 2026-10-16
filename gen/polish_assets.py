@@ -75,7 +75,7 @@ def build_items():
     # 3. Gold amulet pendant around blue gem.
     im=frame();d=ImageDraw.Draw(im); line(d,[(34,20),(34,31),(48,39),(62,31),(62,20)],'#ffcf56',4); ell(d,(33,36,63,67),'#ffca49',INK,4); poly(d,[(48,40),(59,51),(48,63),(37,51)],'#40c9ef',INK,3); poly(d,[(48,44),(54,51),(48,57)],'#b3f4ff',None); out.append(im)
     # 4-5. Clean simple face dice, not ornate 3-D models.
-    out.append(draw_die(5,2,3)); out.append(draw_die(1,2,3,True))
+    out.append(draw_die(5,2,3)); out.append(draw_die(1,1,1,True))
     # 6-8. Daggers and swords: distinct blade material and hero gem.
     for blade,hilt,gem in [('#bfcbd9','#9b6043',None),('#dce8f8','#465c77',None),('#fff1ba','#a64d40','#f14d65')]:
         im=frame();d=ImageDraw.Draw(im); poly(d,[(48,14),(61,43),(52,48),(48,44),(44,48),(35,43)],blade,INK,3); line(d,[(48,18),(52,41)],'#fff',2); line(d,[(35,48),(61,48)],hilt,5); rr(d,(44,49,52,69),4,hilt,INK,3); ell(d,(43,67,53,77),hilt,INK,2)
@@ -136,7 +136,7 @@ def build_dice():
         y=(F-rot.height)//2
         roll.alpha_composite(rot,(F*i,y))
     roll.save(OUT/'dice/roll-hd.png', optimize=True)
-    finish(draw_die(1,2,3,gold=True)).save(OUT/'dice/ichi-hd.png', optimize=True)
+    finish(draw_die(1,1,1,gold=True)).save(OUT/'dice/ichi-hd.png', optimize=True)
 
 def build_objects():
     drawings={}

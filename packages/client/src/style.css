@@ -94,3 +94,10 @@ body { font-family: system-ui, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Mei
 .turnpop { z-index: 40; min-width: 236px; padding: 12px; border-color: #fff1be; text-align: center; }
 .turn-play-icon { display: inline-block; margin-right: 7px; color: #ad4050; }
 .char-stats { color: #fff0c9; text-shadow: 0 1px #29324c; }
+.result-window { z-index: 80; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(300px, calc(100% - 20px)); max-height: calc(100% - 20px); overflow-y: auto; padding: 12px; text-align: center; white-space: normal; touch-action: pan-y; }
+.result-title { font-size: 16px; line-height: 1.45; font-weight: 900; color: #fff2cf; }
+.result-copy { margin: 5px 0 10px; font-size: 12px; line-height: 1.5; color: #e8e2ff; }
+.result-actions { display: flex; flex-direction: column; gap: 7px; }
+.result-action { width: 100%; min-height: 38px; padding: 5px 10px; border: 2px solid #fff0c6; border-radius: 8px; background: linear-gradient(180deg, #ffd75e 0%, #f8a743 100%); box-shadow: 0 3px 0 #9f4d34, inset 0 1px 0 #fff7d9; color: #40294b; font: inherit; font-weight: 900; cursor: pointer; touch-action: manipulation; }
+.result-action:active { transform: translateY(2px); box-shadow: 0 1px 0 #9f4d34; }
+.result-action:disabled { opacity: .72; cursor: wait; }
