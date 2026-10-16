@@ -150,8 +150,10 @@ export class TitleBackdrop {
       c.fillStyle='#9ef2e3'; c.fillText('BEEF  HUNTER',525,204); c.letterSpacing='0px';
       c.font = 'bold 31px sans-serif'; c.fillStyle='#fff9e5';
       c.fillText('サイコロを転がして、お宝をつかめ！',525,244);
-      c.beginPath(); c.roundRect(153,52,128,32,14); c.fillStyle='#f5a83e'; c.fill();
-      c.font='bold 20px sans-serif'; c.fillStyle='#38274c'; c.fillText('冒険RPG',217,73);
+      // 「冒険RPG」は大見出しの上に独立したタグとして置き、文字に被せない。
+      c.beginPath(); c.roundRect(458,42,134,29,14); c.fillStyle='#f5a83e'; c.fill();
+      c.lineWidth=2; c.strokeStyle='#ffe7a0'; c.stroke();
+      c.font='bold 18px sans-serif'; c.fillStyle='#38274c'; c.fillText('冒険RPG',525,57);
       t.refresh();
     }
     const img = s.add.image(0, 0, key);
