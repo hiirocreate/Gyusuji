@@ -114,6 +114,8 @@ for (const orient of ['land', 'port'] as const) {
         const beforeRotate = await page.locator('#stage').getAttribute('data-orient');
         await page.getByRole('button', { name: '画面を回転' }).click();
         await expect(page.locator('#stage')).toHaveAttribute('data-orient', beforeRotate === 'land' ? 'port' : 'land');
+        const rotatedTransform = await page.locator('#stage').evaluate((el: HTMLElement) => el.style.transform);
+        expect(rotatedTransform).toContain(beforeRotate === 'land' ? 'rotate(-90deg)' : 'rotate(90deg)');
         await page.getByRole('button', { name: '画面を回転' }).click();
         page.once('dialog', (dialog) => dialog.accept());
         await page.getByRole('button', { name: 'ゲームを終了' }).click();

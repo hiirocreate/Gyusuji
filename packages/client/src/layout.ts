@@ -37,15 +37,17 @@ export const LAYOUTS: Record<Orient, Layout> = {
 
 let cur: Layout = LAYOUTS.land;
 let forcedOrient: Orient | null = null;
+let initialized = false;
 const listeners = new Set<(l: Layout) => void>();
 
 export const layout = () => cur;
 
-/** 横幅 > 縦幅 なら横画面（URL の ?orient=land|port で固定可：確認用） */
+/** 初回は縦画面、以降は画面比率に追従（URL の ?orient=land|port で固定可：確認用） */
 function detect(): Orient {
   if (forcedOrient) return forcedOrient;
   const q = new URLSearchParams(location.search).get('orient');
   if (q === 'land' || q === 'port') return q;
+  if (!initialized) return 'port';
   return window.innerWidth > window.innerHeight ? 'land' : 'port';
 }
 
@@ -70,6 +72,7 @@ export const stageScale = () => scaleV;
 
 export function applyLayout(): void {
   const o = detect();
+  initialized = true;
   const changed = o !== cur.orient;
   cur = LAYOUTS[o];
   const stage = document.getElementById('stage')!;
@@ -88,7 +91,9 @@ export function applyLayout(): void {
     const x = ins.l + (aw - cur.h * scaleV) / 2;
     const y = ins.t + (ah - cur.w * scaleV) / 2;
     stage.dataset.rotated = 'true';
-    stage.style.transform = `translate(${x}px, ${y}px) rotate(90deg) scale(${scaleV}) translateY(-${cur.h}px)`;
+    stage.style.transform = cur.orient === 'land'
+      ? `translate(${x}px, ${y}px) rotate(90deg) scale(${scaleV}) translateY(-${cur.h}px)`
+      : `translate(${x}px, ${y}px) rotate(-90deg) scale(${scaleV}) translateX(-${cur.w}px)`;
   } else {
     scaleV = Math.min(aw / cur.w, ah / cur.h);
     const x = ins.l + (aw - cur.w * scaleV) / 2;
