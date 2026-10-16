@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { C, CHARS, DEFAULT_SETTINGS } from '@gyusuji/shared';
+import { C, CHARS, DEFAULT_SETTINGS, MAP_NAMES } from '@gyusuji/shared';
 import type { SeatInit, Settings } from '@gyusuji/shared';
 import { ACHIEVEMENTS } from '../achievements.js';
 import { bgm, se } from '../audio.js';
@@ -203,12 +203,13 @@ export class Menu extends Phaser.Scene {
         { label: mine?.ready ? 'ゲーム開始（取り消す）' : 'ゲーム開始', on: () => net.send('ready', { on: !mine?.ready }) },
       ];
       if (isHost) {
+        items.push({ label: `マップ選択：${MAP_NAMES[st.settings.map]}`, on: () => this.netMapPicker(st.settings.map) });
         seats.forEach((s, i) => s.kind !== 'human' && items.push({ label: `席${i + 1}：CPUを${s.kind === 'cpu' ? '外す' : '追加'}`, on: () => net.send('setCpu', { seat: i, on: s.kind !== 'cpu' }) }));
         items.push({ label: 'ハウスルール', on: () => this.houseRules({ ...st.settings }, true, (p) => net.send('setSettings', p)) });
       }
       items.push({ label: 'キャラを選び直す', on: () => this.chars() }, { label: '退室', on: () => { net.leave(); this.title(); } });
       this.show(
-        h('div', {}, '参加者（4人揃うか全員が「ゲーム開始」を押すと始まります）'),
+        h('div', {}, `マップ：${MAP_NAMES[st.settings.map]}　｜　参加者（4人揃うか全員が「ゲーム開始」を押すと始まります）`),
         h('div', { class: 'win list', style: 'min-width:260px' }, ...seats.map((s, i) => h('div', { class: 'it off', style: 'color:#fff' },
           s.kind === 'empty' ? `席${i + 1}　（空き）` : `席${i + 1}　${s.name}${s.kind === 'cpu' ? '' : `（${CHARS[s.charId].role}）`}${s.kind === 'human' && s.ready ? '　準備OK' : ''}${i === st.host ? '　★' : ''}`))),
         this.list(items));
@@ -216,6 +217,19 @@ export class Menu extends Phaser.Scene {
     this.offs.push(net.changed.on(draw));
     this.offs.push(net.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })));
     draw();
+  }
+
+  private netMapPicker(current: Settings['map']) {
+    const maps: Settings['map'][] = [0, 1, 2];
+    const items: MenuItem[] = maps.map((id) => ({
+      label: `${id === current ? '✓ ' : ''}${MAP_NAMES[id]}${id === 0 ? '（標準）' : id === 1 ? '（コンパクト）' : '（じっくり冒険）'}`,
+      on: () => {
+        net.send('setMap', { id });
+        this.waitNet();
+      },
+    }));
+    this.show(h('div', {}, '対戦するマップを選んでください'), this.list(items, 'min-width:240px'),
+      this.list([{ label: 'ロビーへ戻る', on: () => this.waitNet() }], 'min-width:180px'));
   }
 
   private houseRules(s: Settings, editable: boolean, onChange: (p: Partial<Settings>) => void) {
