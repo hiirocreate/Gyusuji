@@ -15,9 +15,10 @@
 - `Status.ts` / `Battle.ts`: 既存の配置に従って情報の見やすさと背景の統一を調整。
 - `Menu.ts` / `style.css`: タイトル、キャラ選択、紺色ウィンドウの視覚的一貫性。
 - `gen/polish_assets.py`: 25種のアイテム・ダイス・宝箱・がびょう・金袋などの高解像度オリジナル素材を出力。既存のID/フレーム対応を維持。
-- `Field.ts` / `Overlay.ts` / `chat.ts`: 2回目のアイテムタップで使用、足あと・使用エフェクト、縦横切替・終了ボタン、短いダイスアニメーション。
+- `Field.ts` / `Overlay.ts` / `chat.ts`: 2回目のアイテムタップで使用、足あと・使用エフェクト、PC横・スマホ縦の初期向きと縦横切替・終了ボタン、短いダイスアニメーション。
+- `Menu.ts`: WebとAndroidで共有するネット対戦ロビーから、ホストが標準・短編・長編マップを明示的に選び、参加者全員が選択中マップを確認できるようにする。
 - `Status.ts`: HP・MP・G・歩数を読みやすく明示。
-- `packages/client/e2e/visual.spec.ts`: 画面の向き・終了・2段階アイテム選択の実画面テスト。
+- `packages/client/e2e/visual.spec.ts` / `orientation.spec.ts` / `network-map.spec.ts`: PC横・スマホ縦の既定、向き切替、ネット対戦マップ同期、終了・2段階アイテム選択の実画面テスト。
 - `packages/shared` / `packages/server` / `assets/data`: ゲームルールとゲームデータの変更対象外。
 
 ## 参考

@@ -42,12 +42,19 @@ const listeners = new Set<(l: Layout) => void>();
 
 export const layout = () => cur;
 
-/** 初回は縦画面、以降は画面比率に追従（URL の ?orient=land|port で固定可：確認用） */
+function defaultOrientation(): Orient {
+  const ua = navigator.userAgent;
+  const mobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)
+    || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  return mobile ? 'port' : 'land';
+}
+
+/** 初回はPCなら横・スマートフォンなら縦。以降は画面比率に追従（URLで固定可） */
 function detect(): Orient {
   if (forcedOrient) return forcedOrient;
   const q = new URLSearchParams(location.search).get('orient');
   if (q === 'land' || q === 'port') return q;
-  if (!initialized) return 'port';
+  if (!initialized) return defaultOrientation();
   return window.innerWidth > window.innerHeight ? 'land' : 'port';
 }
 

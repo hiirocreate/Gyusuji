@@ -3,7 +3,13 @@ import { expect, test } from '@playwright/test';
 test('ネット対戦ホストはロビーからマップを選び、選択内容が反映される', async ({ page }) => {
   test.setTimeout(60000);
   await page.setViewportSize({ width: 360, height: 684 });
-  await page.addInitScript(() => localStorage.setItem('beefhunter.v1', JSON.stringify({ name: 'マップテスト', sound: false, speed: 3, stream: 'none' })));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      get: () => 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36',
+    });
+    localStorage.setItem('beefhunter.v1', JSON.stringify({ name: 'マップテスト', sound: false, speed: 3, stream: 'none' }));
+  });
   await page.goto('/');
 
   await page.locator('.press').click();
