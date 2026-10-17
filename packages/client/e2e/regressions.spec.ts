@@ -97,4 +97,5 @@ test('状態表示・アイテム通知・復活移動・結果画面の回帰�
   await expect(page.getByRole('button', { name: '相手の再戦を待っています…' })).toBeDisabled();
   await page.getByRole('button', { name: '閉じる' }).click();
   await expect(page.getByText('一人で遊ぶ', { exact: true })).toBeVisible();
+  await expect(page.locator('.result-window')).toHaveCount(0);
 });

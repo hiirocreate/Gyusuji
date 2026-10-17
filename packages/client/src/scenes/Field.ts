@@ -103,6 +103,7 @@ export class Field extends Phaser.Scene {
       window.removeEventListener('game-exit', exitGame);
       this.offs.forEach((f) => f());
       fieldUI().replaceChildren();
+      $('overlay').querySelectorAll('.result-window').forEach((el) => el.remove());
       $('overlay').querySelectorAll('.item-desc').forEach((el) => el.remove());
       this.descWin = null;
       closeLog();
@@ -764,7 +765,10 @@ export class Field extends Phaser.Scene {
 
   /** 結果（UI_LAYOUT §5）：閉じるとゲーム終了 */
   private result(winner: number) {
+    let resultWindow: HTMLElement | null = null;
     const close = () => {
+      resultWindow?.remove();
+      resultWindow = null;
       if (this.host.kind === 'online') net.leave();
       this.scene.start('Menu');
     };
@@ -783,9 +787,10 @@ export class Field extends Phaser.Scene {
         if (d) h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })), download: `beefhunter_replay_${Date.now()}.json` }).click();
       } }, 'リプレイ保存'));
     actions.push(h('button', { type: 'button', class: 'result-action', onclick: close }, '閉じる'));
-    $('overlay').append(h('div', { class: 'win result-window', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'ゲーム結果' },
+    resultWindow = h('div', { class: 'win result-window', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'ゲーム結果' },
       h('div', { class: 'result-title' }, `優勝者は ${this.name(winner)} さんです！`),
       h('div', { class: 'result-copy' }, 'このウィンドウを閉じるとゲームを終了します'),
-      h('div', { class: 'result-actions' }, ...actions)));
+      h('div', { class: 'result-actions' }, ...actions));
+    $('overlay').append(resultWindow);
   }
 }
