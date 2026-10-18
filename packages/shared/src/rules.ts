@@ -794,14 +794,17 @@ function joker(g: Game, p: PlayerState): void {
   } else if (r === 1) {
     const q = g.rand.pick(g.players);
     g.msg(`${q.name}に2ダメージ！`, p.seat);
-    if (q !== p) g.emit({ t: 'meddle', seat: p.seat });
+    if (q !== p) {
+      g.emit({ t: 'meddle', seat: p.seat });
+      if (blockedByDoll(g, q)) return;
+    }
     hurt(g, q, 2);
   } else {
     g.msg('ジョーカーが笑った！ MPが2回復し、他の全員に5ダメージ！', p.seat);
     p.mp = Math.min(p.maxMp, p.mp + 2);
     const others = orderFrom(g, p).filter((q) => q !== p);
     if (others.length) g.emit({ t: 'meddle', seat: p.seat });
-    for (const q of others) hurt(g, q, 5);
+    for (const q of others) if (!blockedByDoll(g, q)) hurt(g, q, 5);
   }
 }
 
@@ -847,7 +850,7 @@ function chaosDie(g: Game, p: PlayerState, inBattle: boolean): number {
         g.msg(`狂乱の4！ ${q.name}に99ダメージ！`, p.seat);
         if (q !== p) {
           g.emit({ t: 'meddle', seat: p.seat });
-          hurt(g, q, 99);
+          if (!blockedByDoll(g, q)) hurt(g, q, 99);
         } else fate = hurt(g, p, 99);
       }
       break;
