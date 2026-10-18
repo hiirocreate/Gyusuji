@@ -140,10 +140,16 @@ function addGold(g: Game, p: PlayerState, n: number): void {
   p.gold = Math.min(C.GOLD_MAX, p.gold + n);
   g.emit({ t: 'gold', seat: p.seat, amount: p.gold - before });
 }
-function heal(g: Game, p: PlayerState, n: number): void {
+/** full=true は半減しない回復（魔王の角の雑魚勝利回復） */
+function heal(g: Game, p: PlayerState, n: number, full = false): void {
+  if (!full && has(p, ITEM.demon_horn)) n = Math.floor(n / 2); // 魔王の角：エリクサー・雑魚勝利以外の回復は半分
   const before = p.hp;
   p.hp = Math.min(p.maxHp, p.hp + n);
   g.emit({ t: 'heal', seat: p.seat, amount: p.hp - before });
+}
+/** 攻撃ダイスの追加数（剣玉・魔王の角で各+1） */
+function atkExtra(p: PlayerState): number {
+  return (has(p, ITEM.sword_orb) ? 1 : 0) + (has(p, ITEM.demon_horn) ? 1 : 0);
 }
 /** りんごの回復量。秘伝の鍋があれば3ダイス＋2 */
 function appleHeal(g: Game, p: PlayerState): number {
@@ -632,7 +638,7 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
     let dmg = -1;
     let fx = 'hit';
     if (inp.type === 'battleAttack') {
-      dmg = Math.max(0, roll(g, p, 1 + (has(p, ITEM.sword_orb) ? 1 : 0), 'attack') + weaponAtk(p) - e.def);
+      dmg = Math.max(0, roll(g, p, 1 + atkExtra(p), 'attack') + weaponAtk(p) - e.def);
     } else if (inp.type === 'useItem') {
       const it = p.items[inp.slot];
       const d = ITEMS[it.id];
@@ -651,7 +657,7 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
           p.cursed = false;
           break;
         case ITEM.dice:
-          dmg = Math.max(0, roll(g, p, 2 + (has(p, ITEM.sword_orb) ? 1 : 0), 'attack') + weaponAtk(p) - e.def);
+          dmg = Math.max(0, roll(g, p, 2 + atkExtra(p), 'attack') + weaponAtk(p) - e.def);
           break;
         case ITEM.ichi:
           g.emit({ t: 'dice', seat: p.seat, values: [1], ichi: true, purpose: 'attack' });
@@ -723,6 +729,11 @@ function* victory(g: Game, p: PlayerState, idx: number): Flow {
     g.over = true;
     g.emit({ t: 'gameOver', winner: p.seat, reason: 'ラスボス撃破' });
     return;
+  }
+  if (!e.boss && has(p, ITEM.demon_horn)) {
+    // 魔王の角：雑魚を倒すと、その敵の最大HP分だけ回復（半減しない）
+    g.emit({ t: 'fx', name: 'heal', seat: p.seat });
+    heal(g, p, e.hp, true);
   }
   if (e.goldDice > 0) {
     const n = roll(g, p, e.goldDice, 'gold') * (!e.boss && has(p, ITEM.demon_horn) ? 2 : 1); // 魔王の角：雑魚の所持金2倍

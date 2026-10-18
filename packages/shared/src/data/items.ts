@@ -63,7 +63,7 @@ const L: ItemDef[] = [
   { no: 27, key: 'secret_pot', name: '秘伝の鍋', kind: 'passive', price: null, field: false, battle: false, unique: true, owner: 'chef', desc: 'りんごの回復が3ダイス＋2になる' },
   { no: 28, key: 'joker', name: 'ジョーカーの札', kind: 'magic', price: null, field: true, battle: false, mp: 2, unique: true, owner: 'clown', desc: 'MP2：自分に3ダメージ／誰か1人に2ダメージ／MP2回復して他の全員に5ダメージのどれか' },
   { no: 29, key: 'chaos_dice', name: '狂乱のサイコロ', kind: 'consume', price: null, field: true, battle: true, unique: true, owner: 'clown', keep: true, noLoss: true, desc: '出目ごとに特殊効果。出目の数だけ進む・攻撃する（6は9）。消えず奪われない' },
-  { no: 30, key: 'demon_horn', name: '魔王の角', kind: 'passive', price: null, field: false, battle: false, unique: true, owner: 'overlord', noLoss: true, desc: '同じマスに止まった相手に1ダメージ。ボス戦の被ダメージ-2、雑魚の所持金2倍。神父・アミュレット・勇者装備は使えない' },
+  { no: 30, key: 'demon_horn', name: '魔王の角', kind: 'passive', price: null, field: false, battle: false, unique: true, owner: 'overlord', noLoss: true, desc: '攻撃ダイス+1。同じマスに止まった相手に1ダメージ。ボス戦の被ダメージ-2。雑魚を倒すと所持金2倍＋その敵のHP分回復。それ以外の回復は半分。神父・アミュレット・勇者装備は使えない' },
   { no: 31, key: 'true_sword', name: '真の勇者の剣', kind: 'weapon', price: null, field: false, battle: false, atk: 7, unique: true, noLoss: true, owner: 'brave', desc: '勇者が勇者の剣と盾をそろえると変化。攻撃力+7、奪われない' },
   { no: 32, key: 'true_shield', name: '真の勇者の盾', kind: 'shield', price: null, field: false, battle: false, def: 7, unique: true, noLoss: true, owner: 'brave', desc: '勇者が勇者の剣と盾をそろえると変化。防御力+7、奪われない' },
 ];
