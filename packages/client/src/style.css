@@ -99,6 +99,18 @@ body { font-family: system-ui, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Mei
 .turnpop { z-index: 40; min-width: 236px; padding: 12px; border-color: #fff1be; text-align: center; }
 .turn-play-icon { display: inline-block; margin-right: 7px; color: #ad4050; }
 .char-stats { color: #fff0c9; text-shadow: 0 1px #29324c; }
+.boss-kills-trigger { margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: default; vertical-align: baseline; }
+.boss-kills-trigger:focus-visible { outline: 2px dashed #fff2c5; outline-offset: 2px; }
+.admin-code-backdrop { position: absolute; inset: 0; z-index: 79; background: #101323c9; }
+.full .admin-code-dialog { position: absolute; z-index: 80; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(320px, calc(100% - 20px)); max-height: calc(100% - 20px); overflow-y: auto; padding: 14px; text-align: center; white-space: normal; touch-action: pan-y; }
+.admin-code-title { color: #fff2cf; font-size: 16px; font-weight: 900; }
+.admin-code-note { margin: 6px 0 10px; color: #e8e2ff; font-size: 12px; line-height: 1.5; }
+.admin-code-form { display: flex; flex-direction: column; gap: 8px; }
+.full .admin-code-input { width: 100%; min-height: 42px; padding: 6px 8px; border: 2px solid #ffe4a2; border-radius: 6px; background: #111b28; color: #fff; text-align: center; text-transform: uppercase; font: inherit; font-size: 16px; letter-spacing: .04em; }
+.admin-code-status { min-height: 20px; color: #ffe29a; font-size: 12px; line-height: 1.4; }
+.admin-code-actions { display: flex; gap: 8px; }
+.admin-code-actions .result-action { flex: 1; }
+.admin-code-cancel { background: linear-gradient(180deg, #e4e2f2 0%, #b8b8d7 100%); }
 .result-window { z-index: 80; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(300px, calc(100% - 20px)); max-height: calc(100% - 20px); overflow-y: auto; padding: 12px; text-align: center; white-space: normal; touch-action: pan-y; }
 .result-title { font-size: 16px; line-height: 1.45; font-weight: 900; color: #fff2cf; }
 .result-copy { margin: 5px 0 10px; font-size: 12px; line-height: 1.5; color: #e8e2ff; }
