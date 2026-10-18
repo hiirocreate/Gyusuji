@@ -129,6 +129,10 @@ function heal(g: Game, p: PlayerState, n: number): void {
   p.hp = Math.min(p.maxHp, p.hp + n);
   g.emit({ t: 'heal', seat: p.seat, amount: p.hp - before });
 }
+/** りんごの回復量。秘伝の鍋があれば3ダイス＋2 */
+function appleHeal(g: Game, p: PlayerState): number {
+  return has(p, ITEM.secret_pot) ? roll(g, p, 3, 'heal') + 2 : roll(g, p, 2, 'heal');
+}
 function fullHeal(g: Game, p: PlayerState, mp = false): void {
   heal(g, p, p.maxHp);
   if (mp) p.mp = p.maxMp;
@@ -544,6 +548,19 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
     g.emit({ t: 'battleEnd', seat: p.seat, result });
     g.battle = null;
   };
+  if (has(p, ITEM.hunter_bow)) {
+    // 早撃ちの弓：手番の前に先制で1ダイス（武器・防御は無関係）
+    g.msg(`${p.name}は早撃ちの弓を放った！`, p.seat);
+    const dmg = roll(g, p, 1, 'attack');
+    st.hp = Math.max(0, st.hp - dmg);
+    g.battle.hp = st.hp;
+    g.emit({ t: 'battleHit', seat: p.seat, target: 'enemy', amount: dmg, fx: 'hit' });
+    if (st.hp <= 0) {
+      end('win');
+      yield* victory(g, p, idx);
+      return;
+    }
+  }
   for (;;) {
     const inp = yield { kind: 'battle', seat: p.seat, items: usableSlots(p, 'battle') };
     let dmg = -1;
@@ -560,7 +577,7 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
       switch (it.id) {
         case ITEM.apple:
           g.emit({ t: 'fx', name: 'heal', seat: p.seat });
-          heal(g, p, roll(g, p, 2, 'heal'));
+          heal(g, p, appleHeal(g, p));
           break;
         case ITEM.mag_heal:
           g.emit({ t: 'fx', name: 'heal', seat: p.seat });
@@ -653,7 +670,7 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
   switch (it.id) {
     case ITEM.apple:
       g.emit({ t: 'fx', name: 'heal', seat: p.seat });
-      heal(g, p, roll(g, p, 2, 'heal'));
+      heal(g, p, appleHeal(g, p));
       return;
     case ITEM.amulet:
       setRespawn(g, p);

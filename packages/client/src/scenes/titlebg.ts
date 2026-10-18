@@ -72,7 +72,7 @@ export class TitleBackdrop {
       dir = nd;
       if (!map.cell(x, y)) break;
     }
-    // 主人公5人の隊列
+    // 主人公たちの隊列
     HEROES.forEach((k) => {
       this.shadows.push(s.add.ellipse(0, 0, 22, 7, 0x000000, 0.35));
       this.party.push(s.add.sprite(0, 0, k).setScale(0.72));

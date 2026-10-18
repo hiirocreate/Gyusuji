@@ -162,7 +162,7 @@
    32,
    32
   ],
-  "frames": 25,
+  "frames": 27,
   "order": [
    "apple",
    "elixir",
@@ -188,9 +188,11 @@
    "curse",
    "dragon_mail",
    "warp_scroll",
-   "dummy_doll"
+   "dummy_doll",
+   "hunter_bow",
+   "secret_pot"
   ],
-  "note": "アイテムNo1〜25の順"
+  "note": "アイテムNo1〜27の順"
  },
  "obj/chest": {
   "frame": [
@@ -378,8 +380,8 @@
    96,
    96
   ],
-  "frames": 25,
-  "note": "High-resolution clear-silhouette icon atlas; order matches item numbers 1–25"
+  "frames": 27,
+  "note": "High-resolution clear-silhouette icon atlas; order matches item numbers 1–27"
  },
  "dice/faces-hd": {
   "frame": [

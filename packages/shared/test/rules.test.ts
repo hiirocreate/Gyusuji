@@ -4,10 +4,11 @@ import {
 } from '../src/index.js';
 import type { MapId } from '../src/index.js';
 import { seats, simulate } from './sim.js';
+import { cpuDecide, Rand } from '../src/index.js';
 
 describe('データ', () => {
   it('キャラ初期値', () => {
-    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2]]);
+    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2]]);
   });
   it('敵', () => {
     expect(ENEMIES.enemy_slime.hp).toBe(4);
@@ -167,5 +168,58 @@ describe('ぱるぷん玉<極>', () => {
     expect(JSON.stringify(r.game.view())).not.toContain('kiwami');
     // paru イベント以外で kiwami を含むものは無い
     for (const e of events) if (e.t !== 'paru') expect(JSON.stringify(e)).not.toContain('kiwami');
+  });
+});
+
+describe('固有アイテム', () => {
+  const run = (charId: number, seed: number) => {
+    const ss = seats(2).map((s, i) => (i === 0 ? { ...s, charId } : s));
+    const r = new Runner({ ...DEFAULT_SETTINGS, map: 0 }, ss, seed);
+    const cr = new Rand(seed ^ 0x5555);
+    const events = r.drain();
+    for (let i = 0; r.ask && i < 200000; i++) {
+      r.submit(cpuDecide(r.game, r.ask, cr));
+      events.push(...r.drain());
+    }
+    return { r, events };
+  };
+  it('初期所持品', () => {
+    expect(CHARS[5].items).toEqual([ITEM.hunter_bow, ITEM.dice, ITEM.apple, ITEM.amulet]);
+    expect(CHARS[6].items).toEqual([ITEM.secret_pot, ITEM.apple, ITEM.apple, ITEM.amulet]);
+  });
+  it('早撃ちの弓：戦闘開始直後に1ダイスの先制', () => {
+    let n = 0;
+    for (const seed of [1, 2, 3]) {
+      const { r, events } = run(5, seed);
+      expect(r.game.over).toBe(true);
+      events.forEach((e, i) => {
+        if (e.t !== 'battleStart' || e.seat !== 0) return;
+        const d = events.slice(i).find((x) => x.t === 'dice') as any;
+        const h = events.slice(i).find((x) => x.t === 'battleHit') as any;
+        if (d.values.length === 1 && d.purpose === 'attack' && h.target === 'enemy' && h.amount === d.values[0]) n++;
+      });
+    }
+    expect(n).toBeGreaterThan(0);
+  });
+  it('秘伝の鍋：りんごは3ダイス＋2', () => {
+    let n = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const { events } = run(6, seed);
+      events.forEach((e, i) => {
+        if (e.t !== 'itemUse' || e.seat !== 0 || e.item !== ITEM.apple) return;
+        const d = events.slice(i).find((x) => x.t === 'dice') as any;
+        expect(d.purpose).toBe('heal');
+        expect(d.values.length).toBe(3);
+        n++;
+      });
+    }
+    expect(n).toBeGreaterThan(0);
+  });
+  it('鍋が無ければりんごは2ダイス', () => {
+    const { events } = run(0, 1);
+    events.forEach((e, i) => {
+      if (e.t !== 'itemUse' || e.seat !== 0 || e.item !== ITEM.apple) return;
+      expect((events.slice(i).find((x) => x.t === 'dice') as any).values.length).toBe(2);
+    });
   });
 });

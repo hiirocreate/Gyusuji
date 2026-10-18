@@ -1,8 +1,8 @@
-import { cpuDecide, DEFAULT_SETTINGS, Rand, Runner } from '../src/index.js';
+import { CHARS, cpuDecide, DEFAULT_SETTINGS, Rand, Runner } from '../src/index.js';
 import type { SeatInit, Settings } from '../src/index.js';
 
 export function seats(n: number): SeatInit[] {
-  return Array.from({ length: n }, (_, i) => ({ name: `CPU${i + 1}`, charId: i % 5, isCpu: true }));
+  return Array.from({ length: n }, (_, i) => ({ name: `CPU${i + 1}`, charId: i % CHARS.length, isCpu: true }));
 }
 
 /** CPU だけで最後まで進める */

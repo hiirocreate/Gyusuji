@@ -22,6 +22,7 @@ export const ITEM = {
   wood_shield: 9, iron_shield: 10, hero_shield: 11, run_shoes: 12, safe_shoes: 13,
   mag_heal: 14, mag_fire: 15, mag_luck: 16, mag_summon: 17, sword_orb: 18, paru: 19,
   piyo: 20, absorb: 21, curse: 22, dragon_mail: 23, warp_scroll: 24, dummy_doll: 25,
+  hunter_bow: 26, secret_pot: 27,
 } as const;
 
 const L: ItemDef[] = [
@@ -50,6 +51,8 @@ const L: ItemDef[] = [
   { no: 23, key: 'dragon_mail', name: '竜鱗の鎧', kind: 'shield', price: null, field: false, battle: false, def: 4, ext: true, desc: '防御力+4' },
   { no: 24, key: 'warp_scroll', name: 'ワープの書', kind: 'consume', price: 40, field: true, battle: false, ext: true, desc: '復活地点へ移動' },
   { no: 25, key: 'dummy_doll', name: '身代わり人形', kind: 'auto', price: null, field: false, battle: false, ext: true, desc: '妨害を1回だけ無効化' },
+  { no: 26, key: 'hunter_bow', name: '早撃ちの弓', kind: 'passive', price: null, field: false, battle: false, desc: '戦闘開始時に先制で1ダイスのダメージ' },
+  { no: 27, key: 'secret_pot', name: '秘伝の鍋', kind: 'passive', price: null, field: false, battle: false, desc: 'りんごの回復が3ダイス＋2になる' },
 ];
 
 export const ITEMS: Record<number, ItemDef> = Object.fromEntries(L.map((i) => [i.no, i]));

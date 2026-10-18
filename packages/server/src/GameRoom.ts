@@ -1,6 +1,6 @@
 import { Room, type Client } from 'colyseus';
 import {
-  C, CHAT_COLORS, CHAT_MAX, CLASSIC_PRESET, DEFAULT_SETTINGS, PROTOCOL_VERSION, Runner, STAMPS,
+  C, CHARS, CHAT_COLORS, CHAT_MAX, CLASSIC_PRESET, DEFAULT_SETTINGS, PROTOCOL_VERSION, Runner, STAMPS,
 } from '@gyusuji/shared';
 import type { Ask, Input, SeatInit, Settings } from '@gyusuji/shared';
 import { RoomStateS, SeatS } from './schema.js';
@@ -64,7 +64,7 @@ export class GameRoom extends Room<RoomStateS> {
     this.autoDispose = true;
 
     this.onMessage('setChar', (c, m: { id: number }) => this.lobbySeat(c, (s) => {
-      s.charId = clampInt(m?.id, 0, 4);
+      s.charId = clampInt(m?.id, 0, CHARS.length - 1);
       this.picked.add(this.members.get(c.sessionId)!.seat);
       this.checkStart();
     }));
@@ -75,7 +75,7 @@ export class GameRoom extends Room<RoomStateS> {
       if (!s || s.kind === 'human') return;
       s.kind = m.on ? 'cpu' : 'empty';
       s.name = m.on ? `CPU${clampInt(m.seat, 0, 3) + 1}` : '';
-      s.charId = m.on ? Math.floor(Math.random() * 5) : 0;
+      s.charId = m.on ? Math.floor(Math.random() * CHARS.length) : 0;
       this.checkStart();
     }));
     this.onMessage('ready', (c, m: { on?: boolean }) => this.lobbySeat(c, (s) => {
@@ -169,7 +169,7 @@ export class GameRoom extends Room<RoomStateS> {
     s.connected = true;
     s.proxy = false;
     s.ready = false;
-    if (!midJoin) s.charId = seat % 5;
+    if (!midJoin) s.charId = seat % CHARS.length;
     const token = rid(16);
     this.tokens[seat] = token;
     this.bindSeat(client, seat, token, options.friendCode, options.platform);
