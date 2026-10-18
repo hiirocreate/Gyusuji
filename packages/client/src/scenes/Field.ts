@@ -519,7 +519,7 @@ export class Field extends Phaser.Scene {
         await wait(this, frames(16));
         return;
       case 'dice':
-        if (inBattle && (e.purpose === 'attack' || e.purpose === 'enemy')) await this.battle.attack(e.purpose === 'attack');
+        if (inBattle && (e.purpose === 'attack' || e.purpose === 'enemy' || e.purpose === 'chaos')) await this.battle.attack(e.purpose !== 'enemy');
         await this.overlay.roll(e.values, e.ichi);
         return;
       case 'move': {
