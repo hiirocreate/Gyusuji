@@ -262,7 +262,7 @@ export class Menu extends Phaser.Scene {
   private records() {
     const st = store().stats;
     this.show(h('div', {}, `対戦数 ${st.games}　優勝数 ${st.wins}　ラスボス撃破 ${st.lastBossKills}`),
-      h('div', { class: 'win list', style: 'max-height:200px;overflow:auto' }, ...ACHIEVEMENTS.filter((a) => !a.hidden || store().achievements[a.id]).map((a) => h('div', { class: 'it off', style: `color:${store().achievements[a.id] ? '#ffe650' : '#889'}` }, `${a.name}：${a.desc}`))),
+      h('div', { class: 'win list achievement-list' }, ...ACHIEVEMENTS.filter((a) => !a.hidden || store().achievements[a.id]).map((a) => h('div', { class: 'it off', style: `color:${store().achievements[a.id] ? '#ffe650' : '#889'}` }, `${a.name}：${a.desc}`))),
       this.list([{ label: 'もどる', on: () => this.title() }]));
   }
 

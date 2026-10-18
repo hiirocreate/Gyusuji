@@ -32,6 +32,8 @@ body { font-family: system-ui, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Mei
 .menu-heading { max-width: calc(100% - 20px); padding: 7px 14px; font-size: 15px; line-height: 20px; font-weight: 800; text-align: center; color: #fff2cf; }
 .menu-list { max-width: calc(100% - 20px); box-shadow: 0 5px 0 #754c44, inset 0 1px 0 #ffffff36; }
 .menu-list .it { min-height: 34px; }
+.achievement-list { width: min(340px, calc(100% - 20px)); max-height: 200px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.achievement-list .it { flex: 0 0 auto; padding: 4px 10px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; align-items: flex-start; }
 .full.chat-visible { bottom: 44px; gap: 2px; }
 .chat-visible .menu-heading { padding: 2px 10px; font-size: 12px; line-height: 14px; }
 .chat-visible .list .it, .chat-visible .list .it.off { height: 20px; min-height: 20px; padding: 0 11px; line-height: 18px; }
