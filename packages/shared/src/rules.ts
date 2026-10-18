@@ -307,13 +307,16 @@ function* takeTurn(g: Game, p: PlayerState): Flow {
   }
 }
 
-function* move(g: Game, p: PlayerState, nDice: number, ichi: boolean, bonus = 0): Flow {
+/** fixed を渡すとダイスを振らずにその歩数だけ進む（狂乱のサイコロ） */
+function* move(g: Game, p: PlayerState, nDice: number, ichi: boolean, fixed?: number): Flow {
   let steps: number;
-  if (ichi) {
+  if (fixed !== undefined) {
+    steps = fixed;
+  } else if (ichi) {
     g.emit({ t: 'dice', seat: p.seat, values: [1], ichi: true, purpose: 'move' });
     steps = 1;
   } else {
-    steps = roll(g, p, nDice, 'move') + bonus;
+    steps = roll(g, p, nDice, 'move');
   }
   let cells: { x: number; y: number }[] = [];
   const flush = () => {
@@ -605,7 +608,8 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
             end('lose');
             return;
           }
-          if (st.hp > 0) dmg = Math.max(0, roll(g, p, 1 + (has(p, ITEM.sword_orb) ? 1 : 0), 'attack') + v + weaponAtk(p) - e.def);
+          // 出目（6は9）を通常のダイスと同じく攻撃の目として使う
+          if (st.hp > 0) dmg = Math.max(0, v + weaponAtk(p) - e.def);
           break;
         }
         case ITEM.mag_fire:
@@ -763,7 +767,8 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
       return;
     case ITEM.chaos_dice: {
       const v = chaosDie(g, p, false);
-      if (v > 0) yield* move(g, p, has(p, ITEM.run_shoes) ? 2 : 1, false, v);
+      // 出目（6は9）を通常のダイスと同じく進むマス数として使う
+      if (v > 0) yield* move(g, p, 0, false, v);
       return;
     }
     case ITEM.warp_scroll:
@@ -789,17 +794,14 @@ function joker(g: Game, p: PlayerState): void {
   } else if (r === 1) {
     const q = g.rand.pick(g.players);
     g.msg(`${q.name}に2ダメージ！`, p.seat);
-    if (q !== p) {
-      g.emit({ t: 'meddle', seat: p.seat });
-      if (blockedByDoll(g, q)) return;
-    }
+    if (q !== p) g.emit({ t: 'meddle', seat: p.seat });
     hurt(g, q, 2);
   } else {
     g.msg('ジョーカーが笑った！ MPが2回復し、他の全員に5ダメージ！', p.seat);
     p.mp = Math.min(p.maxMp, p.mp + 2);
     const others = orderFrom(g, p).filter((q) => q !== p);
     if (others.length) g.emit({ t: 'meddle', seat: p.seat });
-    for (const q of others) if (!blockedByDoll(g, q)) hurt(g, q, 5);
+    for (const q of others) hurt(g, q, 5);
   }
 }
 
@@ -845,7 +847,7 @@ function chaosDie(g: Game, p: PlayerState, inBattle: boolean): number {
         g.msg(`狂乱の4！ ${q.name}に99ダメージ！`, p.seat);
         if (q !== p) {
           g.emit({ t: 'meddle', seat: p.seat });
-          if (!blockedByDoll(g, q)) hurt(g, q, 99);
+          hurt(g, q, 99);
         } else fate = hurt(g, p, 99);
       }
       break;

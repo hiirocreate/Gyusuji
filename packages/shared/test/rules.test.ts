@@ -253,19 +253,42 @@ describe('ヒーロ（ピエロ）', () => {
       expect(events.some((e) => e.t === 'loseItem' && e.item === ITEM.chaos_dice)).toBe(false);
     }
   });
-  it('狂乱の6は9として移動に加わる', () => {
+  it('狂乱のサイコロは出目の数だけ進む（6は9）', () => {
+    let nine = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { events } = run(seed, [ITEM.chaos_dice]);
+      events.forEach((e, i) => {
+        if (e.t !== 'dice' || e.purpose !== 'chaos' || e.seat !== 0) return;
+        const rest = events.slice(i + 1);
+        const until = rest.findIndex((x) => x.t === 'turn');
+        const seg = rest.slice(0, until < 0 ? undefined : until);
+        if (seg.some((x) => x.t === 'battleStart' || x.t === 'death' || x.t === 'battleEnd')) return;
+        expect(seg.some((x) => x.t === 'dice' && x.purpose === 'move')).toBe(false);
+        const cells = seg.filter((x) => x.t === 'move').reduce((a, x: any) => a + x.cells.length, 0);
+        const v = e.values[0] === 6 ? 9 : e.values[0];
+        if (e.values[0] === 1 || e.values[0] === 4) return; // 自滅の可能性
+        expect(cells).toBeLessThanOrEqual(v);
+        if (v === 9 && cells === 9) nine++;
+      });
+    }
+    expect(nine).toBeGreaterThan(0);
+  });
+  it('戦闘中の狂乱のサイコロは出目をそのまま攻撃の目にする', () => {
     let n = 0;
-    const { events } = run(2, [ITEM.chaos_dice]);
-    events.forEach((e, i) => {
-      if (e.t !== 'dice' || e.purpose !== 'chaos' || e.values[0] !== 6 || e.seat !== 0) return;
-      const mv = events.slice(i + 1).find((x) => x.t === 'dice') as any;
-      if (mv.purpose !== 'move') return;
-      const rest = events.slice(i + 1);
-      const until = rest.findIndex((x) => x.t === 'turn' || x.t === 'battleStart' || x.t === 'death' || x.t === 'msg' && x.text.includes('分かれ道'));
-      const cells = rest.slice(0, until < 0 ? undefined : until).filter((x) => x.t === 'move').reduce((a, x: any) => a + x.cells.length, 0);
-      expect(cells).toBeLessThanOrEqual(mv.values.reduce((a: number, b: number) => a + b, 0) + 9);
-      n++;
-    });
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { events } = run(seed, [ITEM.chaos_dice]);
+      let enemy = '';
+      events.forEach((e, i) => {
+        if (e.t === 'battleStart') enemy = e.enemy;
+        if (e.t !== 'dice' || e.purpose !== 'chaos' || e.seat !== 0 || e.values[0] === 4) return;
+        const next = events.slice(i + 1).find((x) => x.t === 'dice' || x.t === 'battleHit' || x.t === 'turn') as any;
+        if (!next || next.t !== 'battleHit' || next.target !== 'enemy') return;
+        const v = e.values[0] === 6 ? 9 : e.values[0];
+        expect(next.amount).toBeGreaterThanOrEqual(Math.max(0, v - ENEMIES[enemy].def));
+        expect(next.amount).toBeLessThanOrEqual(v + 3);
+        n++;
+      });
+    }
     expect(n).toBeGreaterThan(0);
   });
   it('ジョーカーの札はMP2を使い、いじわるイベントを出す', () => {

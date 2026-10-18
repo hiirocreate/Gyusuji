@@ -60,7 +60,7 @@ const L: ItemDef[] = [
   { no: 26, key: 'hunter_bow', name: '早撃ちの弓', kind: 'passive', price: null, field: false, battle: false, unique: true, desc: '戦闘開始時に先制で1ダイスのダメージ' },
   { no: 27, key: 'secret_pot', name: '秘伝の鍋', kind: 'passive', price: null, field: false, battle: false, unique: true, desc: 'りんごの回復が3ダイス＋2になる' },
   { no: 28, key: 'joker', name: 'ジョーカーの札', kind: 'magic', price: null, field: true, battle: false, mp: 2, unique: true, desc: 'MP2：自分に3ダメージ／誰か1人に2ダメージ／MP2回復して他の全員に5ダメージのどれか' },
-  { no: 29, key: 'chaos_dice', name: '狂乱のサイコロ', kind: 'consume', price: null, field: true, battle: true, unique: true, keep: true, noLoss: true, desc: '出目ごとに特殊効果。出目は移動・攻撃にも加わる。消えず奪われない' },
+  { no: 29, key: 'chaos_dice', name: '狂乱のサイコロ', kind: 'consume', price: null, field: true, battle: true, unique: true, keep: true, noLoss: true, desc: '出目ごとに特殊効果。出目の数だけ進む・攻撃する（6は9）。消えず奪われない' },
 ];
 
 export const ITEMS: Record<number, ItemDef> = Object.fromEntries(L.map((i) => [i.no, i]));
