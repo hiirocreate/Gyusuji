@@ -128,7 +128,9 @@ def build_items():
     for (x,y),c in zip([(48,22),(36,29),(60,29),(48,36)],['#ff5a6a','#ffd54f','#5ee07a','#56b6ff']): ell(d,(x-4.5,y-4.5,x+4.5,y+4.5),c,INK,1)
     for (x,y),c in zip([(24,47),(38,66),(31,57)],['#ffd54f','#ff5a6a','#fffdf6']): ell(d,(x-4.5,y-4.5,x+4.5,y+4.5),c,INK,1)
     txt(d,(65,58),'?','#ffe86b',stroke_width=1,stroke_fill=INK); poly(d,[(80,8),(83,15),(90,17),(83,20),(80,27),(77,20),(70,17),(77,15)],'#fff3a0',INK,1); out.append(im)
-    assert len(out)==29, len(out)
+    # 30. Demon horn: curled dark horn with a gold band and a red gem.
+    im=frame();d=ImageDraw.Draw(im); poly(d,[(24,74),(34,48),(46,30),(62,18),(76,20),(70,28),(58,34),(50,48),(44,66),(40,78)],'#5d4037',INK,4); line(d,[(36,52),(46,34),(60,24)],'#8d6e63',3); poly(d,[(28,62),(46,68),(43,76),(25,70)],'#ffca28',INK,2); ell(d,(32,63,40,71),'#e53935',WHITE,1); out.append(im)
+    assert len(out)==30, len(out)
     atlas=Image.new('RGBA',(F*len(out),F),(0,0,0,0))
     for i,im in enumerate(out): atlas.alpha_composite(finish(im),(i*F,0))
     atlas.save(OUT/'items/icons-hd.png', optimize=True)
@@ -205,7 +207,7 @@ def main():
     idx_path=OUT/'assets_index.json'
     idx=json.loads(idx_path.read_text())
     additions={
-      'items/icons-hd': {'frame':[96,96],'frames':29,'note':'High-resolution clear-silhouette icon atlas; order matches item numbers 1–29'},
+      'items/icons-hd': {'frame':[96,96],'frames':30,'note':'High-resolution clear-silhouette icon atlas; order matches item numbers 1–30'},
       'dice/faces-hd': {'frame':[96,96],'frames':6,'note':'High-resolution simplified one-to-six dice'},
       'dice/roll-hd': {'frame':[96,96],'frames':8,'note':'High-resolution tumbling dice frames'},
       'dice/ichi-hd': {'frame':[96,96],'frames':1,'note':'High-resolution special guaranteed-one gold die'},

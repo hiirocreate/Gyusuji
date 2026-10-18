@@ -162,7 +162,7 @@
    32,
    32
   ],
-  "frames": 29,
+  "frames": 30,
   "order": [
    "apple",
    "elixir",
@@ -192,9 +192,10 @@
    "hunter_bow",
    "secret_pot",
    "joker",
-   "chaos_dice"
+   "chaos_dice",
+   "demon_horn"
   ],
-  "note": "アイテムNo1〜29の順"
+  "note": "アイテムNo1〜30の順"
  },
  "obj/chest": {
   "frame": [
@@ -382,8 +383,8 @@
    96,
    96
   ],
-  "frames": 29,
-  "note": "High-resolution clear-silhouette icon atlas; order matches item numbers 1–29"
+  "frames": 30,
+  "note": "High-resolution clear-silhouette icon atlas; order matches item numbers 1–30"
  },
  "dice/faces-hd": {
   "frame": [

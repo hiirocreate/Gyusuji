@@ -28,7 +28,7 @@ export const ITEM = {
   wood_shield: 9, iron_shield: 10, hero_shield: 11, run_shoes: 12, safe_shoes: 13,
   mag_heal: 14, mag_fire: 15, mag_luck: 16, mag_summon: 17, sword_orb: 18, paru: 19,
   piyo: 20, absorb: 21, curse: 22, dragon_mail: 23, warp_scroll: 24, dummy_doll: 25,
-  hunter_bow: 26, secret_pot: 27, joker: 28, chaos_dice: 29,
+  hunter_bow: 26, secret_pot: 27, joker: 28, chaos_dice: 29, demon_horn: 30,
 } as const;
 
 const L: ItemDef[] = [
@@ -61,6 +61,7 @@ const L: ItemDef[] = [
   { no: 27, key: 'secret_pot', name: '秘伝の鍋', kind: 'passive', price: null, field: false, battle: false, unique: true, desc: 'りんごの回復が3ダイス＋2になる' },
   { no: 28, key: 'joker', name: 'ジョーカーの札', kind: 'magic', price: null, field: true, battle: false, mp: 2, unique: true, desc: 'MP2：自分に3ダメージ／誰か1人に2ダメージ／MP2回復して他の全員に5ダメージのどれか' },
   { no: 29, key: 'chaos_dice', name: '狂乱のサイコロ', kind: 'consume', price: null, field: true, battle: true, unique: true, keep: true, noLoss: true, desc: '出目ごとに特殊効果。出目の数だけ進む・攻撃する（6は9）。消えず奪われない' },
+  { no: 30, key: 'demon_horn', name: '魔王の角', kind: 'passive', price: null, field: false, battle: false, unique: true, noLoss: true, desc: '同じマスに止まった相手に1ダメージ。ボス戦の被ダメージ-2、雑魚の所持金2倍。神父・アミュレット・勇者装備は使えない' },
 ];
 
 export const ITEMS: Record<number, ItemDef> = Object.fromEntries(L.map((i) => [i.no, i]));

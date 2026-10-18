@@ -8,7 +8,7 @@ import { cpuDecide, Rand } from '../src/index.js';
 
 describe('データ', () => {
   it('キャラ初期値', () => {
-    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2], [12, 16, 2]]);
+    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2], [12, 16, 2], [20, 16, 0]]);
   });
   it('敵', () => {
     expect(ENEMIES.enemy_slime.hp).toBe(4);
@@ -307,5 +307,45 @@ describe('ヒーロ（ピエロ）', () => {
     const ev = r.drain();
     expect(b.items.map((i) => i.id)).toEqual([ITEM.chaos_dice]);
     expect(ev.some((e) => e.t === 'meddle' && e.seat === 0)).toBe(true);
+  });
+});
+
+describe('ネロ（元魔王）', () => {
+  const mk = () => new Runner({ ...DEFAULT_SETTINGS, map: 0 }, seats(2).map((s, i) => (i === 0 ? { ...s, charId: 8 } : s)), 7);
+  it('アミュレット・勇者の剣・勇者の盾は持てない', () => {
+    const r = mk();
+    const p = r.game.players[0];
+    expect(p.items.map((i) => i.id)).toEqual([ITEM.demon_horn, ITEM.dice, ITEM.dice, ITEM.apple]);
+    for (const id of [ITEM.amulet, ITEM.hero_sword, ITEM.hero_shield]) expect(giveItem(r.game, p, id)).toBe(false);
+    expect(giveItem(r.game, p, ITEM.iron_sword)).toBe(true);
+  });
+  it('CPUだけで最後まで進み、角は失われない', () => {
+    for (const seed of [1, 2, 3]) {
+      const ss = seats(3).map((s, i) => (i === 0 ? { ...s, charId: 8 } : s));
+      const r = new Runner({ ...DEFAULT_SETTINGS, map: 0 }, ss, seed);
+      const cr = new Rand(seed);
+      r.drain();
+      for (let i = 0; r.ask && i < 200000; i++) { r.submit(cpuDecide(r.game, r.ask, cr)); r.drain(); }
+      expect(r.game.over).toBe(true);
+      const me = r.game.players[0];
+      expect(me.items.some((i) => i.id === ITEM.demon_horn)).toBe(true);
+      expect(me.items.some((i) => ([ITEM.amulet, ITEM.hero_sword, ITEM.hero_shield] as number[]).includes(i.id))).toBe(false);
+    }
+  });
+  it('同じマスに止まると相手に1ダメージ（いじわるに数える）', () => {
+    let n = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const ss = seats(3).map((s, i) => (i === 0 ? { ...s, charId: 8 } : s));
+      const r = new Runner({ ...DEFAULT_SETTINGS, map: 0 }, ss, seed);
+      const cr = new Rand(seed);
+      const events = r.drain();
+      for (let i = 0; r.ask && i < 200000; i++) { r.submit(cpuDecide(r.game, r.ask, cr)); events.push(...r.drain()); }
+      events.forEach((e, i) => {
+        if (e.t !== 'meddle' || e.seat !== 0) return;
+        const d = events.slice(i + 1).find((x) => x.t === 'damage') as any;
+        if (d && d.seat !== 0 && d.amount === 1) n++;
+      });
+    }
+    expect(n).toBeGreaterThan(0);
   });
 });

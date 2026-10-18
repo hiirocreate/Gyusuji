@@ -29,6 +29,7 @@ const HINTS: Record<number, string> = {
   27: '代々受け継がれた、料理人の大切な鍋。',
   28: '何が起こるかは引いてみてのお楽しみ、道化の切り札。',
   29: 'どの目にも何かが潜む、道化のサイコロ。',
+  30: 'かつて魔王だった者の、禍々しい角。',
 };
 
 export function itemHint(id: number): string {

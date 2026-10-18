@@ -28,8 +28,8 @@ describe('GameRoom', () => {
   it('追加キャラは実績を解放したプレイヤーだけが選べる', async () => {
     const a = new Client(`ws://localhost:${PORT}`);
     const b = new Client(`ws://localhost:${PORT}`);
-    const ra = await a.create<any>('game', { name: 'A', protocol: 3 });
-    const rb = await b.joinById<any>(ra.roomId, { name: 'B', protocol: 3, unlocks: ['all5', 'meanie'] });
+    const ra = await a.create<any>('game', { name: 'A', protocol: 4 });
+    const rb = await b.joinById<any>(ra.roomId, { name: 'B', protocol: 4, unlocks: ['all5', 'meanie'] });
     for (const r of [ra, rb]) for (const t of ['seat', 'chat', 'start', 'sync', 'ev']) r.onMessage(t, () => {});
     await new Promise((r) => setTimeout(r, 100));
     ra.send('setChar', { id: 5 });
@@ -46,7 +46,7 @@ describe('GameRoom', () => {
 
   it('人間1人＋CPU3人で最後まで進み、kiwami が送られない', async () => {
     const client = new Client(`ws://localhost:${PORT}`);
-    const room = await client.create<any>('game', { name: 'テスト', protocol: 3 });
+    const room = await client.create<any>('game', { name: 'テスト', protocol: 4 });
     const raw: string[] = [];
     let mySeat = -1;
     let over = false;
@@ -83,7 +83,7 @@ describe('GameRoom', () => {
 
   it('ゲーム中のルームには入れないが観戦はできる', async () => {
     const a = new Client(`ws://localhost:${PORT}`);
-    const room = await a.create<any>('game', { name: 'A', protocol: 3 });
+    const room = await a.create<any>('game', { name: 'A', protocol: 4 });
     room.onMessage('*', () => {});
     await new Promise((r) => setTimeout(r, 50));
     room.send('setSettings', { timeLimit: 90 });
@@ -92,8 +92,8 @@ describe('GameRoom', () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(room.state.phase).toBe('playing');
     const b = new Client(`ws://localhost:${PORT}`);
-    await expect(b.joinById(room.roomId, { name: 'B', protocol: 3 })).rejects.toBeTruthy();
-    const spec = await b.joinById<any>(room.roomId, { spectator: true, protocol: 3 });
+    await expect(b.joinById(room.roomId, { name: 'B', protocol: 4 })).rejects.toBeTruthy();
+    const spec = await b.joinById<any>(room.roomId, { spectator: true, protocol: 4 });
     spec.onMessage('*', () => {});
     await new Promise((r) => setTimeout(r, 100));
     expect(room.state.spectators).toBe(1);
