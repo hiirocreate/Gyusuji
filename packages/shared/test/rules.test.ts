@@ -8,7 +8,7 @@ import { cpuDecide, Rand } from '../src/index.js';
 
 describe('データ', () => {
   it('キャラ初期値', () => {
-    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2], [12, 16, 2], [20, 16, 0], [12, 14, 2]]);
+    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2], [12, 16, 2], [40, 16, 0], [12, 14, 2]]);
   });
   it('敵', () => {
     expect(ENEMIES.enemy_slime.hp).toBe(4);
@@ -331,6 +331,35 @@ describe('ネロ（元魔王）', () => {
       expect(me.items.some((i) => i.id === ITEM.demon_horn)).toBe(true);
       expect(me.items.some((i) => ([ITEM.amulet, ITEM.hero_sword, ITEM.hero_shield] as number[]).includes(i.id))).toBe(false);
     }
+  });
+  it('攻撃ダイス+1、雑魚撃破でそのHP分回復、りんごの回復は半分', () => {
+    let wins = 0;
+    let apples = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const ss = seats(2).map((s, i) => (i === 0 ? { ...s, charId: 8 } : s));
+      const r = new Runner({ ...DEFAULT_SETTINGS, map: 0 }, ss, seed);
+      const cr = new Rand(seed);
+      const events = r.drain();
+      for (let i = 0; r.ask && i < 200000; i++) { r.submit(cpuDecide(r.game, r.ask, cr)); events.push(...r.drain()); }
+      let enemy = '';
+      events.forEach((e, i) => {
+        if (e.t === 'battleStart' && e.seat === 0) enemy = e.enemy;
+        if (e.t === 'dice' && e.seat === 0 && e.purpose === 'attack') expect(e.values.length).toBeGreaterThanOrEqual(2);
+        if (e.t === 'battleEnd' && e.seat === 0 && e.result === 'win' && !ENEMIES[enemy].boss) {
+          const h = events.slice(i + 1).find((x) => x.t === 'heal' && x.seat === 0) as any;
+          expect(h.amount).toBeLessThanOrEqual(ENEMIES[enemy].hp);
+          wins++;
+        }
+        if (e.t === 'itemUse' && e.seat === 0 && e.item === ITEM.apple) {
+          const d = events.slice(i + 1).find((x) => x.t === 'dice') as any;
+          const h = events.slice(i + 1).find((x) => x.t === 'heal') as any;
+          expect(h.amount).toBeLessThanOrEqual(Math.floor((d.values[0] + d.values[1]) / 2));
+          apples++;
+        }
+      });
+    }
+    expect(wins).toBeGreaterThan(0);
+    expect(apples).toBeGreaterThan(0);
   });
   it('同じマスに止まると相手に1ダメージ（いじわるに数える）', () => {
     let n = 0;
