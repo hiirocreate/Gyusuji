@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { BASE_CHAR_COUNT, C, CHARS, DEFAULT_SETTINGS, MAP_NAMES, charUnlocked, characterCodeUnlockKey } from '@gyusuji/shared';
 import type { SeatInit, Settings } from '@gyusuji/shared';
-import { ACHIEVEMENTS } from '../achievements.js';
+import { ACHIEVEMENTS, SECRET_UNLOCKS } from '../achievements.js';
 import { bgm, se } from '../audio.js';
 import { buildChatBar, say, setSender } from '../chat.js';
 import { settingsForm } from '../forms.js';
@@ -143,7 +143,7 @@ export class Menu extends Phaser.Scene {
   chars() {
     const unlocks = Object.keys(store().achievements);
     // 隠し実績で解放されるキャラは解放されるまで表示しない
-    const shown = CHARS.filter((c) => c.unlock !== 'meanie' || charUnlocked(c.id, unlocks));
+    const shown = CHARS.filter((c) => !c.unlock || !SECRET_UNLOCKS.includes(c.unlock) || charUnlocked(c.id, unlocks));
     const rows = shown.map((c) => {
       if (!charUnlocked(c.id, unlocks)) {
         return h('div', { class: 'it off char-it char-locked' },

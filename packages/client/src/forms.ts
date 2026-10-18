@@ -53,6 +53,6 @@ export function charInfo(id: number): HTMLElement {
 
 /** キャラの顔（スプライト1コマ目）を canvas に描く */
 export function face(charId: number): HTMLElement {
-  const keys = ['summoner', 'courier', 'priest', 'warrior', 'spellknight', 'hunter', 'chef', 'clown'];
+  const keys = ['summoner', 'courier', 'priest', 'warrior', 'spellknight', 'hunter', 'chef', 'clown', 'overlord'];
   return h('div', { class: 'face', style: `background:url(./assets/img/chars/hero_${keys[charId]}.png) 0 0 / 256px 256px;width:64px;height:64px;image-rendering:pixelated` });
 }

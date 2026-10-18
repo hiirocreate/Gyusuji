@@ -35,4 +35,5 @@ export const CHARS: CharDef[] = [
   { id: 5, key: 'hunter', name: 'ホルン', role: '狩人', hp: 12, mp: 4, luck: 3, items: [26, 4, 1, 3], stars: { hp: 2, mp: 1, luck: 3 }, unlock: 'all5', desc: '早撃ちの弓で戦闘開始時に先制攻撃' },
   { id: 6, key: 'chef', name: 'コトコ', role: '料理人', hp: 13, mp: 8, luck: 2, items: [27, 1, 1, 3], stars: { hp: 3, mp: 1, luck: 2 }, unlock: 'all5', desc: '秘伝の鍋でりんごの回復量アップ' },
   { id: 7, key: 'clown', name: 'ヒーロ', role: 'ピエロ', hp: 12, mp: 16, luck: 2, items: [28, 29, 1, 3], stars: { hp: 2, mp: 3, luck: 2 }, unlock: 'meanie', desc: 'ジョーカーの札と狂乱のサイコロで場をかき回す' },
+  { id: 8, key: 'overlord', name: 'ネロ', role: '元魔王', hp: 20, mp: 16, luck: 0, items: [30, 4, 4, 1], stars: { hp: 3, mp: 3, luck: 0 }, unlock: 'nero', desc: '魔王の角を持つ打たれ強い元魔王。神父・アミュレットは使えない' },
 ];

@@ -147,7 +147,13 @@ function fullHeal(g: Game, p: PlayerState, mp = false): void {
 }
 
 /** 入手可能か（ショップ・鍛冶屋の判定） */
+/** 魔王の角の持ち主が持てないアイテム（入手しても消える） */
+function forbidden(p: PlayerState, id: number): boolean {
+  return has(p, ITEM.demon_horn) && (id === ITEM.amulet || id === ITEM.hero_sword || id === ITEM.hero_shield);
+}
+
 export function canAcquire(p: PlayerState, id: number): boolean {
+  if (forbidden(p, id)) return false;
   const d = ITEMS[id];
   if (d.kind === 'magic') return p.maxMp > 0 && !has(p, id) && freeSlots(p) > 0;
   if (d.kind === 'weapon' || d.kind === 'shield') {
@@ -166,6 +172,7 @@ export function canAcquire(p: PlayerState, id: number): boolean {
  */
 export function giveItem(g: Game, p: PlayerState, id: number, inherit?: ItemInst): boolean {
   const d = ITEMS[id];
+  if (forbidden(p, id)) return false;
   const inst: ItemInst = inherit ? { ...inherit } : { id };
   if (!inherit && id === ITEM.paru && g.ext && g.rand.chance(g.settings.kiwamiRate)) inst.kiwami = true;
   if (d.kind === 'weapon' || d.kind === 'shield' || d.kind === 'shoes') {
@@ -350,7 +357,19 @@ function* move(g: Game, p: PlayerState, nDice: number, ichi: boolean, fixed?: nu
     }
   }
   flush();
+  if (has(p, ITEM.demon_horn)) hornStomp(g, p);
   yield* stopEvents(g, p);
+}
+
+/** 魔王の角：止まったマスにいる他のキャラに1ダメージ（身代わり人形では防げない） */
+function hornStomp(g: Game, p: PlayerState): void {
+  const hit = g.players.filter((q) => q !== p && q.x === p.x && q.y === p.y);
+  if (!hit.length) return;
+  g.emit({ t: 'meddle', seat: p.seat });
+  for (const q of hit) {
+    g.msg(`${p.name}の魔王の角が${q.name}を突いた！`, p.seat);
+    hurt(g, q, 1);
+  }
 }
 
 // ───────── マス目イベント ─────────
@@ -379,6 +398,10 @@ function* objectEvent(g: Game, p: PlayerState, idx: number): Flow {
   }
   switch (o.type) {
     case 'priest':
+      if (has(p, ITEM.demon_horn)) {
+        g.msg('神父「魔王に祈る場所はありません」', p.seat);
+        return;
+      }
       setRespawn(g, p);
       g.msg('神父「ここを復活地点として記録しました」', p.seat);
       return;
@@ -538,7 +561,10 @@ function* treasure(g: Game, p: PlayerState, idx: number): Flow {
     return;
   }
   g.emit({ t: 'chestOpen', idx });
-  if (giveItem(g, p, id)) {
+  if (forbidden(p, id)) {
+    g.msg(`${ITEMS[id].name}を手に入れたが、魔王の手で砕けて消えた…`, p.seat);
+    removeObj(g, idx);
+  } else if (giveItem(g, p, id)) {
     g.msg(`${ITEMS[id].name}を手に入れた！`, p.seat);
     removeObj(g, idx);
   } else {
@@ -646,7 +672,8 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
     }
     const atkDice = st.phase2 ? 3 : e.atkDice;
     for (let a = 0; a < actions; a++) {
-      const n = Math.max(0, roll(g, p, atkDice, 'enemy') + e.str - shieldDef(p));
+      const cut = e.boss && has(p, ITEM.demon_horn) ? 2 : 0; // 魔王の角：ボス戦の被ダメージ-2
+      const n = Math.max(0, roll(g, p, atkDice, 'enemy') + e.str - shieldDef(p) - cut);
       g.emit({ t: 'battleHit', seat: p.seat, target: 'player', amount: n, fx: 'hit' });
       if (hurt(g, p, n) === 'dead') {
         end('lose');
@@ -669,12 +696,13 @@ function* victory(g: Game, p: PlayerState, idx: number): Flow {
     return;
   }
   if (e.goldDice > 0) {
-    const n = roll(g, p, e.goldDice, 'gold');
+    const n = roll(g, p, e.goldDice, 'gold') * (!e.boss && has(p, ITEM.demon_horn) ? 2 : 1); // 魔王の角：雑魚の所持金2倍
     g.emit({ t: 'fx', name: 'gold', seat: p.seat });
     addGold(g, p, n);
   }
   if (e.drop !== null) {
     if (giveItem(g, p, e.drop)) g.msg(`${ITEMS[e.drop].name}を手に入れた！`, p.seat);
+    else if (forbidden(p, e.drop)) g.msg(`${ITEMS[e.drop].name}を手に入れたが、魔王の手で砕けて消えた…`, p.seat);
     else g.msg(`${ITEMS[e.drop].name}を落としたが、持てなかった…`, p.seat);
   }
 }

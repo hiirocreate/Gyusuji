@@ -1,6 +1,6 @@
 import index from '../public/assets/img/assets_index.json';
 
-export const HEROES = ['hero_summoner', 'hero_courier', 'hero_priest', 'hero_warrior', 'hero_spellknight', 'hero_hunter', 'hero_chef', 'hero_clown'];
+export const HEROES = ['hero_summoner', 'hero_courier', 'hero_priest', 'hero_warrior', 'hero_spellknight', 'hero_hunter', 'hero_chef', 'hero_clown', 'hero_overlord'];
 export const MONSTERS = ['enemy_slime', 'enemy_thornbug', 'enemy_flytrap', 'enemy_golem', 'enemy_shadow', 'boss_beast', 'boss_demon', 'boss_dragon', 'boss_overlord'];
 export const NPC_OF: Record<string, string> = {
   priest: 'npc/priest', inn: 'npc/inn', shop: 'npc/merchant', shoes: 'npc/shoesage', smith: 'npc/smith', casino: 'npc/dealer',
@@ -26,5 +26,5 @@ export function v2Tile(t: number): string {
 
 /** アイテムNo → アイコン画像の切り出し位置 CSS */
 export function iconStyle(no: number): string {
-  return `background:url(./assets/img/items/icons-hd.png) ${-(no - 1) * 32}px 0 / 928px 32px no-repeat;width:32px;height:32px;display:inline-block;flex:none`;
+  return `background:url(./assets/img/items/icons-hd.png) ${-(no - 1) * 32}px 0 / 960px 32px no-repeat;width:32px;height:32px;display:inline-block;flex:none`;
 }

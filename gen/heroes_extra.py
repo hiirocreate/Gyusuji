@@ -99,7 +99,28 @@ def clown(ph):
     P.append(S('oct',cc+V3(0,0,0.01),'#e53935',R=rot('z',-0.25),sz=0.03,sc=(1,1.3,0.3)))
     return P
 
-NEW={'hero_hunter':hunter,'hero_chef':chef,'hero_clown':clown}
+def overlord(ph):
+    """元魔王：銀髪に大きな巻き角、赤い瞳。黒紫の外套と赤いマント、赤い宝玉の杖"""
+    P,h,hc,hr=body(ph,'#4a148c','#212121','#311b92',mitten='#9e9e9e',stout=1.1,belt='#ffca28')
+    P.append(mass(hc,hr,'#e0e0e0',cut=0.35,r=(1.06,0.98,1.04),bulge=True,bangs=((-0.4,0.45),(-0.12,0.55),(0.16,0.52),(0.42,0.44))))
+    # 巻き角（根元は黒、先へ向かって外→上→内へ巻く）
+    for s_ in (-1,1):
+        pts=[hc+V3(0.55*s_,0.72,-0.05)*hr,hc+V3(0.95*s_,0.95,-0.1)*hr,hc+V3(1.2*s_,1.35,-0.12)*hr,hc+V3(1.05*s_,1.7,-0.1)*hr]
+        rads=(0.17,0.13,0.09,0.05,0.004)
+        for k in range(3):
+            R,L=look(pts[k],pts[k+1]); P.append(S('cone',pts[k],'#3e2723' if k==0 else '#5d4037',R=R,h=L,ra=rads[k]*hr,rb=rads[k+1]*hr,facet=(2,6),spec=0.4))
+    eyes(P,hc,hr,col='#d50000')
+    # 立ち襟の赤いマント（背中側）
+    P.append(S('box',(0,0.3,-0.17),'#b71c1c',b=(0.2,0.24,0.02),rr=0.02,facet=(3,8)))
+    P.append(S('tor',(0,0.53,-0.02),'#b71c1c',r1=0.13,r2=0.035,facet=(4,10)))
+    P.append(S('oct',(0,0.46,0.14),'#ffca28',sz=0.035,sc=(1,1,0.4),spec=0.8))                                   # 留め金
+    # 杖（右手）：黒い柄に赤い宝玉
+    st=h[1]; top=st+V3(0.02,0.36,0.04)
+    R,L=look(st+V3(0,-0.18,0),top); P.append(S('cap',st+V3(0,-0.18,0),'#212121',R=R,r=0.016,h=L,facet=(2,6)))
+    P.append(S('sph',top+V3(0,0.04,0),'#e53935',r=0.045,facet=(3,8),spec=0.9))
+    return P
+
+NEW={'hero_hunter':hunter,'hero_chef':chef,'hero_clown':clown,'hero_overlord':overlord}
 if __name__=='__main__':
     out=sys.argv[1]; only=set(sys.argv[2:])
     for k,f in NEW.items():

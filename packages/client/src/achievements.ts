@@ -19,7 +19,11 @@ export const ACHIEVEMENTS: { id: string; name: string; desc: string; hidden?: bo
   { id: 'all5', name: '五傑制覇', desc: '5人のキャラクターすべてで優勝する（狩人・料理人が解放）' },
   { id: 'all7', name: '全キャラ制覇', desc: '狩人・料理人を含む7人すべてで優勝する' },
   { id: 'meanie', name: 'いじわるマスター', desc: '他のキャラにアイテムを30回使う（ヒーロが解放）', hidden: true },
+  { id: 'nero', name: '不屈の覇者', desc: '一度も倒れずにラスボスを倒して優勝する（ネロが解放）', hidden: true },
 ];
+
+/** 隠し実績で解放されるキャラは、解放されるまで一覧にも出さない */
+export const SECRET_UNLOCKS: string[] = ACHIEVEMENTS.filter((a) => a.hidden).map((a) => a.id);
 
 export function unlock(id: string): void {
   if (store().achievements[id]) return;
@@ -32,6 +36,9 @@ export function unlock(id: string): void {
 export class Tracker {
   private battleEnemy = '';
   private view: PublicView | null = null;
+  /** このゲームで倒れた（エリクサー復活を含む）席 */
+  private fallen = new Set<number>();
+  private lastBossBy = -1;
   constructor(private mine: Set<number>) {}
   feed(events: GameEvent[], view: PublicView): void {
     this.view = view;
@@ -39,11 +46,13 @@ export class Tracker {
       const me = 'seat' in e && this.mine.has(e.seat as number);
       if (e.t === 'paru' && me && e.kiwami) unlock('kiwami');
       if (e.t === 'revive' && me) unlock('elixir');
+      if ((e.t === 'revive' || e.t === 'death') && me) this.fallen.add(e.seat);
       if (e.t === 'battleStart' && me) this.battleEnemy = e.enemy;
       if (e.t === 'battleEnd' && me && e.result === 'win') {
         const b = ENEMIES[this.battleEnemy]?.boss;
         if (b === 'mid') unlock('midboss');
         if (b === 'last') {
+          this.lastBossBy = e.seat;
           unlock('lastboss');
           update((s) => s.stats.lastBossKills++);
           if (store().stats.lastBossKills >= 10) unlock('true_hero');
@@ -71,7 +80,8 @@ export class Tracker {
     });
     const won = (n: number) => Array.from({ length: n }, (_, i) => i).every((i) => store().stats.charWins[i] > 0);
     if (won(BASE_CHAR_COUNT)) unlock('all5');
-    if (won(CHARS.filter((c) => c.unlock !== 'meanie').length)) unlock('all7');
+    if (won(CHARS.filter((c) => !c.unlock || !SECRET_UNLOCKS.includes(c.unlock)).length)) unlock('all7');
+    if (this.mine.has(winner) && this.lastBossBy === winner && !this.fallen.has(winner)) unlock('nero');
     if (this.mine.has(winner)) unlock('first_win');
     if (store().stats.games >= 10) unlock('games10');
     if (store().stats.wins >= 5) unlock('wins5');
