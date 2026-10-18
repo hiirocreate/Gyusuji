@@ -1,5 +1,3 @@
-import { store, update } from './store.js';
-
 /** 画面構成（UI_LAYOUT.md §1）。論理キャンバスを縦横比を保って拡大縮小し、余白は黒帯 */
 export type Orient = 'land' | 'port';
 
@@ -23,7 +21,7 @@ export const LAYOUTS: Record<Orient, Layout> = {
     orient: 'land', w: 640, h: 324,
     field: { x: 0, y: 0, size: 280, scale: 1 },
     status: { x: 280, y: 0, w: 360, h: 280 },
-    chat: { x: 0, y: 280, w: 640, h: 44, input: 428 },
+    chat: { x: 0, y: 280, w: 640, h: 44, input: 466 },
     stream: { w: 640, h: 280, lanes: 6 },
     log: { x: 40, y: 20, w: 560, h: 250 },
   },
@@ -31,34 +29,40 @@ export const LAYOUTS: Record<Orient, Layout> = {
     orient: 'port', w: 360, h: 684,
     field: { x: 0, y: 0, size: 360, scale: 360 / 280 },
     status: { x: 0, y: 360, w: 360, h: 280 },
-    chat: { x: 0, y: 640, w: 360, h: 44, input: 148 },
+    chat: { x: 0, y: 640, w: 360, h: 44, input: 186 },
     stream: { w: 360, h: 640, lanes: 10 },
     log: { x: 10, y: 60, w: 340, h: 520 },
   },
 };
 
 let cur: Layout = LAYOUTS.land;
+let forcedOrient: Orient | null = null;
+let initialized = false;
 const listeners = new Set<(l: Layout) => void>();
 
 export const layout = () => cur;
 
-/** 横幅 > 縦幅 なら横画面（URL の ?orient=land|port で固定可：確認用） */
-/** 画面の向き：既定は縦。切り替えボタンで変更し、端末に保存（URL の ?orient=land|port は確認用） */
-function detect(): Orient {
-  const q = new URLSearchParams(location.search).get('orient');
-  if (q === 'land' || q === 'port') return q;
-  return store().orient;
+function defaultOrientation(): Orient {
+  const ua = navigator.userAgent;
+  const mobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)
+    || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  return mobile ? 'port' : 'land';
 }
 
-/** 縦⇔横を切り替える（ゲーム・通信は止めずにレイアウトだけ切り替え） */
-export function toggleOrient(): void {
-  update((s) => (s.orient = s.orient === 'port' ? 'land' : 'port'));
-  const u = new URL(location.href);
-  if (u.searchParams.has('orient')) {
-    u.searchParams.delete('orient');
-    history.replaceState(null, '', u);
-  }
+/** 初回はPCなら横・スマートフォンなら縦。以降は画面比率に追従（URLで固定可） */
+function detect(): Orient {
+  if (forcedOrient) return forcedOrient;
+  const q = new URLSearchParams(location.search).get('orient');
+  if (q === 'land' || q === 'port') return q;
+  if (!initialized) return defaultOrientation();
+  return window.innerWidth > window.innerHeight ? 'land' : 'port';
+}
+
+/** ボタンから縦横レイアウトを切り替える。ゲーム状態と通信には触れない。 */
+export function toggleOrientation(): Orient {
+  forcedOrient = cur.orient === 'land' ? 'port' : 'land';
   applyLayout();
+  return cur.orient;
 }
 
 function safeInsets() {
@@ -75,6 +79,7 @@ export const stageScale = () => scaleV;
 
 export function applyLayout(): void {
   const o = detect();
+  initialized = true;
   const changed = o !== cur.orient;
   cur = LAYOUTS[o];
   const stage = document.getElementById('stage')!;
@@ -87,10 +92,22 @@ export function applyLayout(): void {
   const ins = safeInsets();
   const aw = vw - ins.l - ins.r;
   const ah = vh - ins.t - ins.b;
-  scaleV = Math.min(aw / cur.w, ah / cur.h);
-  const x = ins.l + (aw - cur.w * scaleV) / 2;
-  const y = ins.t + (ah - cur.h * scaleV) / 2;
-  stage.style.transform = `translate(${x}px, ${y}px) scale(${scaleV})`;
+  const rotateStage = (aw / ah > 1) !== (cur.w / cur.h > 1);
+  if (rotateStage) {
+    scaleV = Math.min(aw / cur.h, ah / cur.w);
+    const x = ins.l + (aw - cur.h * scaleV) / 2;
+    const y = ins.t + (ah - cur.w * scaleV) / 2;
+    stage.dataset.rotated = 'true';
+    stage.style.transform = cur.orient === 'land'
+      ? `translate(${x}px, ${y}px) rotate(90deg) scale(${scaleV}) translateY(-${cur.h}px)`
+      : `translate(${x}px, ${y}px) rotate(-90deg) scale(${scaleV}) translateX(-${cur.w}px)`;
+  } else {
+    scaleV = Math.min(aw / cur.w, ah / cur.h);
+    const x = ins.l + (aw - cur.w * scaleV) / 2;
+    const y = ins.t + (ah - cur.h * scaleV) / 2;
+    delete stage.dataset.rotated;
+    stage.style.transform = `translate(${x}px, ${y}px) scale(${scaleV})`;
+  }
   const f = cur.field;
   const fu = document.getElementById('fieldui')!;
   fu.style.left = `${f.x}px`;

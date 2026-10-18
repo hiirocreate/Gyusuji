@@ -2,10 +2,10 @@ import Phaser from 'phaser';
 import { C, ENEMIES, GameMap, ITEMS, MAPS } from '@gyusuji/shared';
 import type { Ask, GameEvent, PublicPlayer, PublicView } from '@gyusuji/shared';
 import { Tracker, unlock } from '../achievements.js';
-import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, classicTile, iconStyle, v2Tile } from '../assets.js';
+import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, iconStyle } from '../assets.js';
 import { bgm, se } from '../audio.js';
 import { buildChatBar, closeLog, notify, say, setSender, system } from '../chat.js';
-import { onLayout } from '../layout.js';
+import { layout, onLayout } from '../layout.js';
 import { net, type Host, type OnlineHost } from '../net.js';
 import { update } from '../store.js';
 import { $, centerWin, fieldUI, h, menuWin, type MenuItem } from '../ui.js';
@@ -13,12 +13,14 @@ import type { Battle } from './Battle.js';
 import type { Overlay } from './Overlay.js';
 import type { Status } from './Status.js';
 import { fieldCam, frames, tween, wait } from './fieldcam.js';
+import { drawShoreline, pathTexture, terrainTexture } from './classicTerrain.js';
+import { itemHint } from '../itemHints.js';
 
 const T = C.TILE;
 /** キャラの描画位置はマス中心から上へ10px（SQU_CHR_OFFS_Y） */
 const CHR_OFFS_Y = -10;
-/** キャラは少し寄りで表示（素材64px → 約58px） */
-const HERO_SCALE = 0.9;
+/** 隣接マスを隠さない小さなプリレンダ風の立ち姿。判定位置は従来どおり。 */
+const HERO_SCALE = 0.72;
 type Batch = { events: GameEvent[]; view: PublicView };
 const ARROWS = ['up', 'down', 'left', 'right'];
 
@@ -39,10 +41,13 @@ export class Field extends Phaser.Scene {
   private tracker!: Tracker;
   private shownAsk = '';
   private streamedAsk = '';
+  private pendingItemSlot: number | null = null;
+  private pendingOptionIndex: number | null = null;
   private offs: (() => void)[] = [];
   private actor = 0;
   private hpWin: HTMLElement | null = null;
   private timerWin: HTMLElement | null = null;
+  private pendingRespawn: { seat: number; x: number; y: number; dir: PublicPlayer['dir'] } | null = null;
 
   constructor() {
     super('Field');
@@ -54,6 +59,7 @@ export class Field extends Phaser.Scene {
     this.busy = false;
     this.shownAsk = '';
     this.streamedAsk = '';
+    this.pendingRespawn = null;
   }
 
   create() {
@@ -79,16 +85,27 @@ export class Field extends Phaser.Scene {
     buildChatBar();
     $('chatbar').style.display = 'flex';
     setSender(host.kind === 'online' ? (t, c) => host.sendChat(t, c) : null);
+    const exitGame = () => {
+      closeLog();
+      if (host.kind === 'online') net.leave();
+      this.scene.start('Menu');
+    };
+    window.addEventListener('game-exit', exitGame);
 
     this.offs = [
       host.batch.on((b) => { this.queue.push(b); void this.pump(); }),
       host.askChanged.on(() => this.refreshAsk(true)),
       host.kind === 'online' ? host.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })) : () => {},
-      onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); })),
+      host.kind === 'online' ? net.started.on((next) => this.scene.restart({ host: next })) : () => {},
+      onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); this.positionDesc(); })),
     ];
     this.events.once('shutdown', () => {
+      window.removeEventListener('game-exit', exitGame);
       this.offs.forEach((f) => f());
       fieldUI().replaceChildren();
+      $('overlay').querySelectorAll('.result-window').forEach((el) => el.remove());
+      $('overlay').querySelectorAll('.item-desc').forEach((el) => el.remove());
+      this.descWin = null;
       closeLog();
       this.scene.stop('Battle');
       this.scene.stop('Overlay');
@@ -115,14 +132,14 @@ export class Field extends Phaser.Scene {
       blits[tex].create(x * T - 1, y * T - 1);
     };
     // タイルは縁を1px延長した版を1pxずらして重ねる（拡大時の隙間対策）
-    const sea0 = this.add.blitter(-1, -1, 'tiles/sea_0+').setDepth(-3);
-    const sea1 = this.add.blitter(-1, -1, 'tiles/sea_1+').setDepth(-3).setVisible(false);
+    const sea0 = this.add.blitter(-1, -1, 'classic/sea_0+').setDepth(-3);
+    const sea1 = this.add.blitter(-1, -1, 'classic/sea_1+').setDepth(-3).setVisible(false);
     // 画面外も海で埋める
     for (let y = -6; y < d.height + 6; y++) {
       for (let x = -6; x < d.width + 6; x++) {
         const inside = x >= 0 && y >= 0 && x < d.width && y < d.height;
         const t = inside ? d.terrain[y * d.width + x] : -1;
-        const tex = !inside ? 'sea' : v2 ? v2Tile(t) : classicTile(t);
+        const tex = !inside ? 'sea' : terrainTexture(t, v2, x, y);
         if (tex === 'sea') {
           sea0.create(x * T, y * T);
           sea1.create(x * T, y * T);
@@ -130,11 +147,11 @@ export class Field extends Phaser.Scene {
       }
     }
     this.time.addEvent({ delay: 700, loop: true, callback: () => { sea0.setVisible(!sea0.visible); sea1.setVisible(!sea1.visible); } });
+    drawShoreline(this, d);
     for (const p of d.path) {
       const t = d.terrain[p.y * d.width + p.x];
       const onSea = v2 ? t === 0 : t === 3;
-      const tex = p.c === 'start' ? 'tiles/path_start' : p.c === 'branch' ? 'tiles/path_branch' : p.c === 'lastboss' ? 'tiles/path_lastboss'
-        : /^boss/.test(p.c) ? 'tiles/path_boss' : onSea ? 'tiles/bridge' : 'tiles/path';
+      const tex = pathTexture(p.c, onSea);
       blits[`p:${tex}`] ??= this.add.blitter(0, 0, `${tex}+`).setDepth(-1);
       blits[`p:${tex}`].create(p.x * T - 1, p.y * T - 1);
     }
@@ -151,7 +168,7 @@ export class Field extends Phaser.Scene {
       const cy = o.y * T + T / 2;
       let s: Phaser.GameObjects.Sprite | null = null;
       if (NPC_OF[o.type]) s = this.add.sprite(cx, cy + CHR_OFFS_Y, NPC_OF[o.type], DIR_ROW[o.dir ?? 'down']).setScale(HERO_SCALE);
-      else if (OBJ_OF[o.type]) s = this.add.sprite(cx, cy, OBJ_OF[o.type]).setScale(0.8);
+      else if (OBJ_OF[o.type]) s = this.add.sprite(cx, cy, OBJ_OF[o.type]).setDisplaySize(38, 38);
       else if (ENEMIES[o.type]) {
         const e = ENEMIES[o.type];
         s = this.add.sprite(cx, cy + CHR_OFFS_Y, e.sprite).setScale(e.boss ? 1.15 : HERO_SCALE).play(`${e.sprite}_idle`);
@@ -176,6 +193,7 @@ export class Field extends Phaser.Scene {
     this.heroes[seat].setPosition(px, py + CHR_OFFS_Y);
     this.shadows[seat].setPosition(px, py + 8);
     this.restack();
+    this.syncMarks(seat);
   }
 
   /** 手番キャラは同じマスでも一番手前 */
@@ -228,17 +246,44 @@ export class Field extends Phaser.Scene {
   }
 
   private descWin: HTMLElement | null = null;
+  private positionDesc() {
+    if (!this.descWin) return;
+    const L = layout();
+    const left = L.orient === 'land' ? L.field.x + L.field.size + 8 : 12;
+    const top = L.orient === 'land' ? 164 : L.field.y + L.field.size + 12;
+    this.descWin.style.left = `${left}px`;
+    this.descWin.style.top = `${top}px`;
+    this.descWin.style.width = `${L.w - left - 12}px`;
+  }
+
   private showDesc(it: MenuItem | null) {
     this.descWin?.remove();
     this.descWin = null;
     if (!it?.desc) return;
-    this.descWin = this.addWin(centerWin(140, 240, h('div', {}, it.label), h('div', { style: 'font-size:12px' }, it.desc)));
+    this.descWin = h('div', { class: 'win item-desc', 'aria-live': 'polite' },
+      h('div', { class: 'item-desc-title' }, it.label), h('div', { class: 'item-desc-copy' }, it.desc));
+    $('overlay').append(this.descWin);
+    this.positionDesc();
+    // A dedicated screen-space window keeps every selectable row unobstructed.
+    this.descWin.style.pointerEvents = 'none';
   }
 
-  private gotWin(icon: number | null, text: string) {
+  private showItemHint(id: number, label: string, use = false) {
+    this.showDesc({ label, desc: itemHint(id) });
+    if (use) this.descWin?.append(h('div', { class: 'tap-instruction' }, '同じアイテムをもう一度タップすると使います'));
+  }
+
+  private showActionHint(label: string, hint: string, action: string) {
+    this.showDesc({ label, desc: hint });
+    this.descWin?.append(h('div', { class: 'tap-instruction' }, `もう一度タップすると${action}`));
+  }
+
+  private gotWin(icon: number | null, text: string, durationMs = 1500) {
     const el = centerWin(140, 140, icon ? h('span', { style: `${iconStyle(icon)};vertical-align:middle;margin-right:6px` }) : null, text);
+    el.classList.add('notice-window');
+    if (icon) el.querySelector('span')?.classList.add('win-icon');
     fieldUI().append(el);
-    this.time.delayedCall(frames(30), () => el.remove());
+    this.time.delayedCall(durationMs, () => el.remove());
   }
 
   private refreshAsk(force = false) {
@@ -246,6 +291,10 @@ export class Field extends Phaser.Scene {
     const ask = this.host.ask;
     const key = JSON.stringify(ask);
     if (!force && key === this.shownAsk) return;
+    if (key !== this.shownAsk) {
+      this.pendingOptionIndex = null;
+      this.pendingItemSlot = null;
+    }
     this.shownAsk = key;
     this.clearWins();
     this.showDesc(null);
@@ -264,6 +313,8 @@ export class Field extends Phaser.Scene {
     closeLog(); // 手番が来たらログは自動で閉じる
     const send = (inp: Parameters<Host['send']>[0]) => {
       se('select');
+      this.pendingOptionIndex = null;
+      this.pendingItemSlot = null;
       this.clearWins();
       this.showDesc(null);
       this.host.send(inp);
@@ -273,33 +324,63 @@ export class Field extends Phaser.Scene {
       this.lookAt(ask.seat);
       this.addWin(menuWin([
         { label: '移動', on: () => send({ type: 'roll' }) },
-        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, ask.seat, (slot) => send({ type: 'useItem', slot })) },
       ], 'left:16px;top:16px'));
     } else if (ask.kind === 'battle') {
       this.addWin(menuWin([
         { label: 'たたかう', on: () => send({ type: 'battleAttack' }) },
-        { label: 'アイテム', on: () => this.itemList(p, ask.items, (slot) => send({ type: 'useItem', slot })) },
+        { label: 'アイテム', on: () => this.itemList(p, ask.items, ask.seat, (slot) => send({ type: 'useItem', slot })) },
       ], 'left:16px;top:200px'));
     } else {
-      const win = this.addWin(menuWin(ask.options.map((o, i) => ({
+      const needsTwoTaps = (i: number) => {
+        const o = ask.options[i];
+        const treasure = ask.sub === 'treasure' && o.label.includes('開ける');
+        const item = !!o.value && !!ITEMS[o.value] && ['shop', 'smith', 'shoes', 'qbox'].includes(ask.sub);
+        return !o.disabled && (item || treasure);
+      };
+      const rows = ask.options.map((o, i) => ({
         label: o.label, disabled: o.disabled,
-        icon: o.value && ITEMS[o.value] ? iconStyle(o.value) : undefined,
-        desc: o.value && ITEMS[o.value] ? ITEMS[o.value].desc : undefined,
-        on: () => send({ type: 'select', index: i }),
-      })), 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+        icon: needsTwoTaps(i) ? iconStyle(o.value!) : undefined,
+        desc: needsTwoTaps(i) ? itemHint(o.value!) : undefined,
+        on: () => {
+          if (needsTwoTaps(i) && this.pendingOptionIndex !== i) {
+            this.pendingOptionIndex = i;
+            win.querySelectorAll('.it').forEach((el) => el.classList.remove('confirm-tap'));
+            win.querySelectorAll('.it')[i]?.classList.add('confirm-tap');
+            if (o.value && ITEMS[o.value]) this.showItemHint(o.value, o.label, true);
+            else this.showActionHint(o.label, '中には思いがけないお宝が入っているかも。', '宝箱を開けます');
+            return;
+          }
+          send({ type: 'select', index: i });
+        },
+      }));
+      const win = this.addWin(menuWin(rows, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+      if (this.pendingOptionIndex !== null) win.querySelectorAll('.it')[this.pendingOptionIndex]?.classList.add('confirm-tap');
       // 問いかけ文は対象プレイヤーのウィンドウ先頭に表示（流さない）
       win.prepend(h('div', { style: 'padding:0 11px;line-height:22px;color:#ffe650;white-space:normal;max-width:240px' }, ask.title));
     }
   }
 
-  private itemList(p: PublicPlayer, usable: number[], onUse: (slot: number) => void) {
+  private itemList(p: PublicPlayer, usable: number[], seat: number, onUse: (slot: number) => void) {
     this.clearWins();
     const items: MenuItem[] = p.items.map((id, slot) => ({
       label: ITEMS[id].name + (ITEMS[id].mp ? `（MP${ITEMS[id].mp}）` : ''),
-      icon: iconStyle(id), desc: ITEMS[id].desc, disabled: !usable.includes(slot), on: () => onUse(slot),
+      icon: iconStyle(id), desc: itemHint(id), disabled: !usable.includes(slot), on: () => {
+        if (this.pendingItemSlot !== slot) {
+          this.pendingItemSlot = slot;
+          win.querySelectorAll('.it').forEach((el) => el.classList.remove('confirm-tap'));
+          win.querySelectorAll('.it')[slot]?.classList.add('confirm-tap');
+          this.showItemHint(id, ITEMS[id].name, true);
+          return;
+        }
+        this.pendingItemSlot = null;
+        this.overlay.itemUse(id, this.heroes[seat].x, this.heroes[seat].y - 12);
+        onUse(slot);
+      },
     }));
-    items.push({ label: 'もどる', on: () => this.refreshAsk(true) });
-    this.addWin(menuWin(items, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+    items.push({ label: 'もどる', on: () => { this.pendingItemSlot = null; this.refreshAsk(true); } });
+    const win = this.addWin(menuWin(items, 'left:16px;top:16px;max-height:248px;overflow-y:auto', (it) => this.showDesc(it)));
+    if (this.pendingItemSlot !== null) win.querySelectorAll('.it')[this.pendingItemSlot]?.classList.add('confirm-tap');
   }
 
   private tickTimer() {
@@ -361,11 +442,29 @@ export class Field extends Phaser.Scene {
 
   private setMarks(p: PublicPlayer) {
     const list = this.marks[p.seat];
-    list.forEach((m) => m.destroy());
-    list.length = 0;
     const s = this.heroes[p.seat];
-    if (p.stun > 0) list.push(this.add.sprite(s.x, s.y - 22, 'fx/piyo').play('fx/piyo').setScale(0.5).setDepth(99999));
-    if (p.cursed) list.push(this.add.sprite(s.x + 10, s.y - 18, 'fx/curse').play('fx/curse').setScale(0.35).setDepth(99999));
+    const sync = (texture: string, active: boolean, x: number, y: number, scale: number) => {
+      const index = list.findIndex((mark) => mark.texture.key === texture);
+      if (!active) {
+        if (index >= 0) list.splice(index, 1)[0].destroy();
+        return;
+      }
+      if (index >= 0) {
+        list[index].setPosition(x, y).setDepth(99999).setScale(scale);
+        return;
+      }
+      list.push(this.add.sprite(x, y, texture).play(texture).setScale(scale).setDepth(99999));
+    };
+    sync('fx/piyo', p.stun > 0, s.x, s.y - 22, 0.5);
+    sync('fx/curse', p.cursed, s.x + 10, s.y - 18, 0.35);
+  }
+
+  private syncMarks(seat: number) {
+    const s = this.heroes[seat];
+    for (const mark of this.marks[seat]) {
+      if (mark.texture.key === 'fx/piyo') mark.setPosition(s.x, s.y - 22);
+      else if (mark.texture.key === 'fx/curse') mark.setPosition(s.x + 10, s.y - 18);
+    }
   }
 
   private fxAt(name: string, wx: number, wy: number, scale = 0.7) {
@@ -400,11 +499,12 @@ export class Field extends Phaser.Scene {
     switch (e.t) {
       case 'turn':
         this.view = { ...this.view, turn: e.seat, round: e.round };
+        if (end.players[e.seat]) this.setMarks(end.players[e.seat]);
         this.restack();
         this.status.draw(this.view, e.seat);
         this.lookAt(e.seat);
         if (this.host.mySeats.has(e.seat)) {
-          // 該当プレイヤーにはポップアップ。〇を押して閉じる
+          // 自分の手番は明確な行動開始ボタンで知らせる。
           system(`${this.name(e.seat)}の番です`);
           se('turn');
           await this.turnPopup(`${this.name(e.seat)}の番です`);
@@ -425,6 +525,7 @@ export class Field extends Phaser.Scene {
       case 'move': {
         const seat = e.seat;
         const s = this.heroes[seat];
+        if (end.players[seat]) this.setMarks(end.players[seat]);
         this.lookAt(seat);
         this.cursor.setVisible(false);
         let px = Math.floor(s.x / T);
@@ -435,6 +536,8 @@ export class Field extends Phaser.Scene {
           // 1マス 5 フレームの直線補間
           await tween(this, { targets: s, x: c.x * T + T / 2, y: c.y * T + T / 2 + CHR_OFFS_Y, duration: frames(5) });
           this.shadows[seat].setPosition(s.x, s.y - CHR_OFFS_Y + 8);
+          this.syncMarks(seat);
+          this.overlay.stepFx(s.x, s.y + 10);
           s.setDepth(this.depthOf(c.y, 6));
           se('step');
           px = c.x;
@@ -475,8 +578,12 @@ export class Field extends Phaser.Scene {
       case 'getItem':
         se('get');
         system(`${this.name(e.seat)}は${ITEMS[e.item].name}を手に入れた！`);
-        if (this.host.mySeats.has(e.seat)) this.gotWin(e.item, `${ITEMS[e.item].name}を手に入れた！`);
-        await wait(this, frames(10));
+        this.gotWin(e.item, `${this.name(e.seat)}は${ITEMS[e.item].name}を手に入れた！`);
+        await wait(this, 1500);
+        return;
+      case 'itemUse':
+        this.gotWin(e.item, `${this.name(e.seat)}は${ITEMS[e.item].name}を使った！`);
+        await wait(this, 1500);
         return;
       case 'loseItem':
         return;
@@ -486,7 +593,7 @@ export class Field extends Phaser.Scene {
         return;
       }
       case 'chestOpen':
-        this.objSprites[e.idx]?.setTexture('obj/chest_open');
+        this.objSprites[e.idx]?.setTexture('obj/chest_open-hd');
         await wait(this, frames(8));
         return;
       case 'fx': {
@@ -530,6 +637,11 @@ export class Field extends Phaser.Scene {
         this.hpWin = null;
         this.view = { ...this.view, battle: null };
         bgm('field');
+        if (this.pendingRespawn) {
+          const r = this.pendingRespawn;
+          this.pendingRespawn = null;
+          await this.animateRespawn(r.seat, r);
+        }
         return;
       case 'death':
         se('lose');
@@ -540,15 +652,13 @@ export class Field extends Phaser.Scene {
         await wait(this, frames(10));
         return;
       case 'respawn': {
-        const r = end.players[e.seat]?.respawn;
-        if (r) {
-          this.placeHero(e.seat, r.x, r.y);
-          this.heroes[e.seat].setAlpha(1).setAngle(0);
-          se('warp');
-          this.lookAt(e.seat);
-          this.fxAt('warp', this.heroes[e.seat].x, this.heroes[e.seat].y);
-        }
-        await wait(this, frames(10));
+        const player = end.players[e.seat];
+        if (!player) return;
+        this.setMarks(player);
+        const r = player.respawn;
+        const target = { seat: e.seat, x: r.x, y: r.y, dir: r.dir };
+        if (inBattle) this.pendingRespawn = target;
+        else await this.animateRespawn(e.seat, target);
         return;
       }
       case 'warp': {
@@ -619,29 +729,68 @@ export class Field extends Phaser.Scene {
         h('div', { style: 'font-size:16px;margin-bottom:6px;text-align:center' }, text),
         h('div', { style: 'text-align:center' }, h('button', {
           class: 'okbtn', onclick: () => { se('select'); close(); },
-        }, '〇')));
+        }, h('span', { class: 'turn-play-icon' }, '▶'), ' 行動をはじめる')));
       el.classList.add('turnpop');
       fieldUI().append(el);
     });
   }
 
+  private async animateRespawn(seat: number, target: { x: number; y: number; dir: PublicPlayer['dir'] }) {
+    const hero = this.heroes[seat];
+    if (!hero) return;
+    const x = target.x * T + T / 2;
+    const y = target.y * T + T / 2 + CHR_OFFS_Y;
+    const dx = x - hero.x;
+    const dy = y - hero.y;
+    const direction = Math.abs(dx) > Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+    this.lookAt(seat);
+    this.faceHero(seat, direction, true);
+    hero.setVisible(true).setAlpha(0.35).setAngle(0);
+    se('warp');
+    this.fxAt('warp', hero.x, hero.y);
+    await tween(this, {
+      targets: hero, x, y, alpha: 1, angle: 0, duration: frames(24), ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        this.shadows[seat].setPosition(hero.x, hero.y - CHR_OFFS_Y + 8);
+        this.syncMarks(seat);
+        this.restack();
+      },
+    });
+    hero.stop();
+    this.faceHero(seat, target.dir, false);
+    this.placeHero(seat, target.x, target.y);
+    this.fxAt('warp', hero.x, hero.y);
+    await wait(this, frames(8));
+  }
+
   /** 結果（UI_LAYOUT §5）：閉じるとゲーム終了 */
   private result(winner: number) {
+    let resultWindow: HTMLElement | null = null;
     const close = () => {
+      resultWindow?.remove();
+      resultWindow = null;
       if (this.host.kind === 'online') net.leave();
       this.scene.start('Menu');
     };
-    const items: MenuItem[] = [{ label: '閉じる', on: close }];
-    if (this.host.kind === 'online') items.unshift({ label: 'リマッチ', on: () => net.send('rematch') });
-    items.unshift({
-      label: 'リプレイ保存', on: async () => {
+    const actions: HTMLElement[] = [];
+    if (this.host.kind === 'online') {
+      const rematch = h('button', { type: 'button', class: 'result-action', onclick: () => {
+        if (rematch.disabled) return;
+        rematch.disabled = true;
+        rematch.textContent = '相手の再戦を待っています…';
+        net.send('rematch');
+      } }, 'リマッチ');
+      actions.push(rematch);
+    }
+    actions.push(h('button', { type: 'button', class: 'result-action', onclick: async () => {
         const d = await this.host.replayData();
         if (d) h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })), download: `beefhunter_replay_${Date.now()}.json` }).click();
-      },
-    });
-    $('overlay').append(h('div', { class: 'win', style: 'left:50%;top:40%;transform:translate(-50%,-50%);padding:10px 14px;text-align:center' },
-      h('div', { style: 'font-size:16px' }, `優勝者は ${this.name(winner)} さんです！`),
-      h('div', { style: 'font-size:12px;margin:4px 0' }, 'このウィンドウを閉じるとゲームを終了します'),
-      menuWin(items, 'position:static;border:0')));
+      } }, 'リプレイ保存'));
+    actions.push(h('button', { type: 'button', class: 'result-action', onclick: close }, '閉じる'));
+    resultWindow = h('div', { class: 'win result-window', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'ゲーム結果' },
+      h('div', { class: 'result-title' }, `優勝者は ${this.name(winner)} さんです！`),
+      h('div', { class: 'result-copy' }, 'このウィンドウを閉じるとゲームを終了します'),
+      h('div', { class: 'result-actions' }, ...actions));
+    $('overlay').append(resultWindow);
   }
 }

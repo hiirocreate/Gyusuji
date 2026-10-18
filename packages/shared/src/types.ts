@@ -158,6 +158,7 @@ export type GameEvent =
   | { t: 'heal'; seat: number; amount: number }
   | { t: 'gold'; seat: number; amount: number }
   | { t: 'getItem'; seat: number; item: number }
+  | { t: 'itemUse'; seat: number; item: number }
   | { t: 'loseItem'; seat: number; item: number }
   | { t: 'objRemove'; idx: number }
   | { t: 'chestOpen'; idx: number }

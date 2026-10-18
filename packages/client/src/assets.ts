@@ -6,7 +6,7 @@ export const NPC_OF: Record<string, string> = {
   priest: 'npc/priest', inn: 'npc/inn', shop: 'npc/merchant', shoes: 'npc/shoesage', smith: 'npc/smith', casino: 'npc/dealer',
 };
 export const OBJ_OF: Record<string, string> = {
-  treasure: 'obj/chest', qbox: 'obj/qbox', tack: 'obj/tack', tack_big: 'obj/tack_big', gold_small: 'obj/gold_small', gold_large: 'obj/gold_large',
+  treasure: 'obj/chest-hd', qbox: 'obj/qbox-hd', tack: 'obj/tack-hd', tack_big: 'obj/tack_big-hd', gold_small: 'obj/gold_small-hd', gold_large: 'obj/gold_large-hd',
 };
 /** 向き → スプライトシートの行（下・左・右・上） */
 export const DIR_ROW = { down: 0, left: 1, right: 2, up: 3 } as const;
@@ -26,5 +26,5 @@ export function v2Tile(t: number): string {
 
 /** アイテムNo → アイコン画像の切り出し位置 CSS */
 export function iconStyle(no: number): string {
-  return `background:url(./assets/img/items/icons.png) ${-(no - 1) * 32}px 0;width:32px;height:32px;display:inline-block;flex:none`;
+  return `background:url(./assets/img/items/icons-hd.png) ${-(no - 1) * 32}px 0 / 800px 32px no-repeat;width:32px;height:32px;display:inline-block;flex:none`;
 }
