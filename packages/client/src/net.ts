@@ -218,17 +218,27 @@ export class Net {
 
   /** 前回の席へ復帰（切断から時間が経っても可） */
   async resume(): Promise<boolean> {
-    const last = sessionStorage.getItem('bh.lastSeat');
-    if (!last) return false;
-    const { roomId, token } = JSON.parse(last);
+    // 復帰（アプリ前面化と切断処理）が同時に走ると同じ席へ二重に入室してしまうので1本にまとめる
+    if (this.resuming) return this.resuming;
+    this.resuming = (async () => {
+      const last = sessionStorage.getItem('bh.lastSeat');
+      if (!last || this.room) return !!this.room;
+      const { roomId, token } = JSON.parse(last);
+      try {
+        await this.joinById(roomId, { token });
+        return true;
+      } catch {
+        sessionStorage.removeItem('bh.lastSeat');
+        return false;
+      }
+    })();
     try {
-      await this.joinById(roomId, { token });
-      return true;
-    } catch {
-      sessionStorage.removeItem('bh.lastSeat');
-      return false;
+      return await this.resuming;
+    } finally {
+      this.resuming = null;
     }
   }
+  private resuming: Promise<boolean> | null = null;
 
   leave(): void {
     sessionStorage.removeItem('bh.lastSeat');
@@ -271,7 +281,9 @@ export class Net {
         this.host.view = view;
         this.started.emit(this.host);
       } else {
+        // 再接続時：切断中に見逃した分を画面に反映し、操作ウィンドウを出し直す
         this.host.view = view;
+        this.host.batch.emit({ events: [], view });
       }
     });
     room.onMessage('ev', (m: { events: GameEvent[]; view: string }) => {
