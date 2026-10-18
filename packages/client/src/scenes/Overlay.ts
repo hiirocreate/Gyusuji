@@ -16,15 +16,16 @@ export class Overlay extends Phaser.Scene {
   }
 
   /** シンプルな立方体が弧を描いて回転し、約0.5秒で着地する */
-  async roll(values: number[], ichi = false): Promise<void> {
+  async roll(values: number[], ichi = false, chaos = false): Promise<void> {
+    const rollKey = chaos ? 'dice/chaos-roll-hd' : 'dice/roll-hd';
     const objs: Phaser.GameObjects.GameObject[] = [];
     se('dice');
     const runs = values.map((v, i) => {
       const [sx, sy] = DICE_FROM[i % DICE_FROM.length];
       const shadow = this.add.ellipse(sx, sy + 16, 34, 11, 0x1c1730, 0.3).setDepth(9);
-      const s = this.add.sprite(sx, sy, ichi ? 'dice/ichi-hd' : 'dice/roll-hd').setDisplaySize(52, 52).setDepth(10);
+      const s = this.add.sprite(sx, sy, ichi ? 'dice/ichi-hd' : rollKey).setDisplaySize(52, 52).setDepth(10);
       objs.push(shadow, s);
-      if (!ichi) s.play('dice/roll-hd');
+      if (!ichi) s.play(rollKey);
       const tx = 110 + i * 40;
       const ty = 120 + i * 6;
       return new Promise<void>((resolve) => this.tweens.addCounter({ from: 0, to: 1, duration: frames(12), ease: 'Cubic.easeOut', onUpdate: (tw) => {
@@ -36,7 +37,7 @@ export class Overlay extends Phaser.Scene {
         s.stop();
         s.setAngle(0);
         if (ichi) s.setTexture('dice/ichi-hd');
-        else s.setTexture('dice/faces-hd', v - 1);
+        else s.setTexture(chaos ? 'dice/chaos-hd' : 'dice/faces-hd', v - 1);
       });
     });
     await Promise.all(runs);

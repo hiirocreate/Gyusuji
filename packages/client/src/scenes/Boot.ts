@@ -32,6 +32,7 @@ export class Boot extends Phaser.Scene {
       this.anims.create({ key: k, frames: this.anims.generateFrameNumbers(k, {}), frameRate: 16, repeat: k === 'fx/cursor' || k === 'fx/piyo' || k === 'fx/curse' ? -1 : 0 });
     }
     this.anims.create({ key: 'dice/roll-hd', frames: this.anims.generateFrameNumbers('dice/roll-hd', {}), frameRate: 20, repeat: -1 });
+    this.anims.create({ key: 'dice/chaos-roll-hd', frames: this.anims.generateFrameNumbers('dice/chaos-roll-hd', {}), frameRate: 20, repeat: -1 });
     for (const k of HEROES) {
       ['down', 'left', 'right', 'up'].forEach((d, row) => {
         this.anims.create({ key: `${k}_${d}`, frames: this.anims.generateFrameNumbers(k, { start: row * 4, end: row * 4 + 3 }), frameRate: 8, repeat: -1 });

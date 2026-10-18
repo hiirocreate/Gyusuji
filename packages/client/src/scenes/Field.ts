@@ -471,6 +471,8 @@ export class Field extends Phaser.Scene {
     if (!this.textures.exists(`fx/${name}`)) return;
     const s = this.add.sprite(wx, wy, `fx/${name}`).setDepth(99998).setScale(scale).play(`fx/${name}`);
     s.once('animationcomplete', () => s.destroy());
+    // ループするアニメ（ひよこ等）は完了しないので一定時間で消す（状態表示は setMarks が担当）
+    if (s.anims.currentAnim?.repeat === -1) this.time.delayedCall(frames(24), () => s.destroy());
   }
 
   private popAt(seat: number, sheet: string, value: number) {
@@ -517,10 +519,11 @@ export class Field extends Phaser.Scene {
       case 'skip':
         se('piyo');
         await wait(this, frames(16));
+        if (end.players[e.seat]) this.setMarks(end.players[e.seat]); // 行動不能が明けたらひよこを外す
         return;
       case 'dice':
         if (inBattle && (e.purpose === 'attack' || e.purpose === 'enemy' || e.purpose === 'chaos')) await this.battle.attack(e.purpose !== 'enemy');
-        await this.overlay.roll(e.values, e.ichi);
+        await this.overlay.roll(e.values, e.ichi, e.purpose === 'chaos');
         return;
       case 'move': {
         const seat = e.seat;

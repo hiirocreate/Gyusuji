@@ -466,5 +466,21 @@
   ],
   "frames": 1,
   "note": "High-resolution special guaranteed-one gold die"
+ },
+ "dice/chaos-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 6,
+  "note": "Chaos die faces (violet, rainbow pips)"
+ },
+ "dice/chaos-roll-hd": {
+  "frame": [
+   96,
+   96
+  ],
+  "frames": 8,
+  "note": "Chaos die tumbling frames"
  }
 }
