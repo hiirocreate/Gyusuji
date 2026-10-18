@@ -44,6 +44,19 @@ describe('GameRoom', () => {
     await rb.leave();
   });
 
+  it('同じ端末で入り直しても自分が2人にならない', async () => {
+    const a = new Client(`ws://localhost:${PORT}`);
+    const r1 = await a.create<any>('game', { name: 'A', protocol: 5, friendCode: '12345678' });
+    for (const t of ['seat', 'chat', 'start', 'sync', 'ev']) r1.onMessage(t, () => {});
+    // 退室が届く前に同じ端末から再入室（古い接続は残ったまま）
+    const r2 = await a.joinById<any>(r1.roomId, { name: 'A', protocol: 5, friendCode: '12345678' });
+    for (const t of ['seat', 'chat', 'start', 'sync', 'ev']) r2.onMessage(t, () => {});
+    await new Promise((r) => setTimeout(r, 300));
+    const humans = r2.state.seats.filter((x: any) => x.kind === 'human');
+    expect(humans.length).toBe(1);
+    await r2.leave();
+  });
+
   it('人間1人＋CPU3人で最後まで進み、kiwami が送られない', async () => {
     const client = new Client(`ws://localhost:${PORT}`);
     const room = await client.create<any>('game', { name: 'テスト', protocol: 5 });
