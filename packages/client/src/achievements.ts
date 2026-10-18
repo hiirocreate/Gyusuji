@@ -1,4 +1,4 @@
-import { BASE_CHAR_COUNT, CHARS, ENEMIES, ITEM } from '@gyusuji/shared';
+import { CHARS, ENEMIES, ITEM } from '@gyusuji/shared';
 import type { GameEvent, PublicView } from '@gyusuji/shared';
 import { store, update } from './store.js';
 import { system } from './chat.js';
@@ -15,7 +15,7 @@ export const ACHIEVEMENTS: { id: string; name: string; desc: string; hidden?: bo
   { id: 'midboss', name: '番人狩り', desc: '中ボスを倒す' },
   { id: 'elixir', name: '不死身', desc: 'エリクサーで復活する' },
   { id: 'hero_set', name: '伝説の装備', desc: '勇者の剣と勇者の盾を同時に持つ' },
-  { id: 'true_hero', name: '真の勇者', desc: 'ラスボスを10回倒す' },
+  { id: 'true_hero', name: '真の勇者', desc: 'ラスボスを10回倒す（勇者が解放）' },
   { id: 'all5', name: '五傑制覇', desc: '5人のキャラクターすべてで優勝する（狩人・料理人が解放）' },
   { id: 'all7', name: '全キャラ制覇', desc: '狩人・料理人を含む7人すべてで優勝する' },
   { id: 'meanie', name: 'いじわるマスター', desc: '他のキャラにアイテムを30回使う（ヒーロが解放）', hidden: true },
@@ -78,9 +78,10 @@ export class Tracker {
       if (this.mine.has(winner)) s.stats.wins++;
       if (this.mine.has(winner) && charId !== undefined) s.stats.charWins[charId] = (s.stats.charWins[charId] ?? 0) + 1;
     });
-    const won = (n: number) => Array.from({ length: n }, (_, i) => i).every((i) => store().stats.charWins[i] > 0);
-    if (won(BASE_CHAR_COUNT)) unlock('all5');
-    if (won(CHARS.filter((c) => !c.unlock || !SECRET_UNLOCKS.includes(c.unlock)).length)) unlock('all7');
+    const won = (ids: number[]) => ids.every((i) => store().stats.charWins[i] > 0);
+    if (won(CHARS.filter((c) => !c.unlock).map((c) => c.id))) unlock('all5');
+    // 全キャラ制覇は初期5人＋狩人・料理人の7人
+    if (won(CHARS.filter((c) => !c.unlock || c.unlock === 'all5').map((c) => c.id))) unlock('all7');
     if (this.mine.has(winner) && this.lastBossBy === winner && !this.fallen.has(winner)) unlock('nero');
     if (this.mine.has(winner)) unlock('first_win');
     if (store().stats.games >= 10) unlock('games10');

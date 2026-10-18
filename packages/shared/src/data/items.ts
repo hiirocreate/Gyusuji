@@ -20,6 +20,8 @@ export interface ItemDef {
   keep?: boolean;
   /** 奪われない・失わない */
   noLoss?: boolean;
+  /** 固有アイテムの持ち主（キャラ key）。遊び方ページでは持ち主の解放まで伏せる */
+  owner?: string;
   desc: string;
 }
 
@@ -28,7 +30,7 @@ export const ITEM = {
   wood_shield: 9, iron_shield: 10, hero_shield: 11, run_shoes: 12, safe_shoes: 13,
   mag_heal: 14, mag_fire: 15, mag_luck: 16, mag_summon: 17, sword_orb: 18, paru: 19,
   piyo: 20, absorb: 21, curse: 22, dragon_mail: 23, warp_scroll: 24, dummy_doll: 25,
-  hunter_bow: 26, secret_pot: 27, joker: 28, chaos_dice: 29, demon_horn: 30,
+  hunter_bow: 26, secret_pot: 27, joker: 28, chaos_dice: 29, demon_horn: 30, true_sword: 31, true_shield: 32,
 } as const;
 
 const L: ItemDef[] = [
@@ -57,11 +59,13 @@ const L: ItemDef[] = [
   { no: 23, key: 'dragon_mail', name: '竜鱗の鎧', kind: 'shield', price: null, field: false, battle: false, def: 4, ext: true, desc: '防御力+4' },
   { no: 24, key: 'warp_scroll', name: 'ワープの書', kind: 'consume', price: 40, field: true, battle: false, ext: true, desc: '復活地点へ移動' },
   { no: 25, key: 'dummy_doll', name: '身代わり人形', kind: 'auto', price: null, field: false, battle: false, ext: true, desc: '妨害を1回だけ無効化' },
-  { no: 26, key: 'hunter_bow', name: '早撃ちの弓', kind: 'passive', price: null, field: false, battle: false, unique: true, desc: '戦闘開始時に先制で1ダイスのダメージ' },
-  { no: 27, key: 'secret_pot', name: '秘伝の鍋', kind: 'passive', price: null, field: false, battle: false, unique: true, desc: 'りんごの回復が3ダイス＋2になる' },
-  { no: 28, key: 'joker', name: 'ジョーカーの札', kind: 'magic', price: null, field: true, battle: false, mp: 2, unique: true, desc: 'MP2：自分に3ダメージ／誰か1人に2ダメージ／MP2回復して他の全員に5ダメージのどれか' },
-  { no: 29, key: 'chaos_dice', name: '狂乱のサイコロ', kind: 'consume', price: null, field: true, battle: true, unique: true, keep: true, noLoss: true, desc: '出目ごとに特殊効果。出目の数だけ進む・攻撃する（6は9）。消えず奪われない' },
-  { no: 30, key: 'demon_horn', name: '魔王の角', kind: 'passive', price: null, field: false, battle: false, unique: true, noLoss: true, desc: '同じマスに止まった相手に1ダメージ。ボス戦の被ダメージ-2、雑魚の所持金2倍。神父・アミュレット・勇者装備は使えない' },
+  { no: 26, key: 'hunter_bow', name: '早撃ちの弓', kind: 'passive', price: null, field: false, battle: false, unique: true, owner: 'hunter', desc: '戦闘開始時に先制で1ダイスのダメージ' },
+  { no: 27, key: 'secret_pot', name: '秘伝の鍋', kind: 'passive', price: null, field: false, battle: false, unique: true, owner: 'chef', desc: 'りんごの回復が3ダイス＋2になる' },
+  { no: 28, key: 'joker', name: 'ジョーカーの札', kind: 'magic', price: null, field: true, battle: false, mp: 2, unique: true, owner: 'clown', desc: 'MP2：自分に3ダメージ／誰か1人に2ダメージ／MP2回復して他の全員に5ダメージのどれか' },
+  { no: 29, key: 'chaos_dice', name: '狂乱のサイコロ', kind: 'consume', price: null, field: true, battle: true, unique: true, owner: 'clown', keep: true, noLoss: true, desc: '出目ごとに特殊効果。出目の数だけ進む・攻撃する（6は9）。消えず奪われない' },
+  { no: 30, key: 'demon_horn', name: '魔王の角', kind: 'passive', price: null, field: false, battle: false, unique: true, owner: 'overlord', noLoss: true, desc: '同じマスに止まった相手に1ダメージ。ボス戦の被ダメージ-2、雑魚の所持金2倍。神父・アミュレット・勇者装備は使えない' },
+  { no: 31, key: 'true_sword', name: '真の勇者の剣', kind: 'weapon', price: null, field: false, battle: false, atk: 7, unique: true, noLoss: true, owner: 'brave', desc: '勇者が勇者の剣と盾をそろえると変化。攻撃力+7、奪われない' },
+  { no: 32, key: 'true_shield', name: '真の勇者の盾', kind: 'shield', price: null, field: false, battle: false, def: 7, unique: true, noLoss: true, owner: 'brave', desc: '勇者が勇者の剣と盾をそろえると変化。防御力+7、奪われない' },
 ];
 
 export const ITEMS: Record<number, ItemDef> = Object.fromEntries(L.map((i) => [i.no, i]));

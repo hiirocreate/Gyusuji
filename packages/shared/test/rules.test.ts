@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  C, CHARS, DEFAULT_SETTINGS, ENEMIES, Game, GameMap, ITEM, MAPS, Runner, TREASURE_TABLE, giveItem, hurt, rng, shopStock,
+  C, CHARS, DEFAULT_SETTINGS, ENEMIES, Game, GameMap, ITEM, MAPS, Runner, TREASURE_TABLE, giveItem, hurt, rng, shieldDef, shopStock, weaponAtk,
 } from '../src/index.js';
 import type { MapId } from '../src/index.js';
 import { seats, simulate } from './sim.js';
@@ -8,7 +8,7 @@ import { cpuDecide, Rand } from '../src/index.js';
 
 describe('データ', () => {
   it('キャラ初期値', () => {
-    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2], [12, 16, 2], [20, 16, 0]]);
+    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2], [12, 16, 2], [20, 16, 0], [12, 14, 2]]);
   });
   it('敵', () => {
     expect(ENEMIES.enemy_slime.hp).toBe(4);
@@ -347,5 +347,43 @@ describe('ネロ（元魔王）', () => {
       });
     }
     expect(n).toBeGreaterThan(0);
+  });
+});
+
+describe('アルス（勇者）', () => {
+  const mk = () => new Game({ ...DEFAULT_SETTINGS }, seats(2).map((s, i) => (i === 0 ? { ...s, charId: 9 } : s)), 3);
+  it('剣・盾の値が+1、ノロイは持てない', () => {
+    const g = mk();
+    const [p, q] = g.players;
+    giveItem(g, p, ITEM.iron_sword);
+    giveItem(g, p, ITEM.wood_shield);
+    expect(weaponAtk(p)).toBe(3);
+    expect(shieldDef(p)).toBe(2);
+    giveItem(g, q, ITEM.iron_sword);
+    expect(weaponAtk(q)).toBe(2);
+    expect(giveItem(g, p, ITEM.curse)).toBe(false);
+  });
+  it('勇者の剣と盾をそろえると真の勇者の剣と盾になり、+7で奪われない', () => {
+    const g = mk();
+    const p = g.players[0];
+    giveItem(g, p, ITEM.hero_sword);
+    expect(weaponAtk(p)).toBe(4);
+    giveItem(g, p, ITEM.hero_shield);
+    expect(p.items.some((i) => i.id === ITEM.hero_sword || i.id === ITEM.hero_shield)).toBe(false);
+    expect(weaponAtk(p)).toBe(7);
+    expect(shieldDef(p)).toBe(7);
+    // 他キャラは変化しない
+    const q = g.players[1];
+    giveItem(g, q, ITEM.hero_sword);
+    giveItem(g, q, ITEM.hero_shield);
+    expect(q.items.some((i) => i.id === ITEM.hero_sword)).toBe(true);
+  });
+  it('倒れるたびに吸収玉かさいころを手に入れる', () => {
+    const g = mk();
+    const p = g.players[0];
+    p.items = [];
+    expect(hurt(g, p, 99)).toBe('dead');
+    expect(p.items.length).toBe(1);
+    expect([ITEM.absorb, ITEM.dice]).toContain(p.items[0].id);
   });
 });

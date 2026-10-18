@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BASE_CHAR_COUNT, C, CHARS, DEFAULT_SETTINGS, MAP_NAMES, charUnlocked, characterCodeUnlockKey } from '@gyusuji/shared';
+import { BASE_CHAR_COUNT, C, CHARS, DEFAULT_SETTINGS, ITEMS, MAP_NAMES, charUnlocked, characterCodeUnlockKey } from '@gyusuji/shared';
 import type { SeatInit, Settings } from '@gyusuji/shared';
 import { ACHIEVEMENTS, SECRET_UNLOCKS } from '../achievements.js';
 import { bgm, se } from '../audio.js';
@@ -8,10 +8,12 @@ import { settingsForm } from '../forms.js';
 import { LocalHost, ReplayHost, httpBase, net, type ReplayData } from '../net.js';
 import { store, update } from '../store.js';
 import { $, h, menuWin, screenEl, type MenuItem } from '../ui.js';
-import { HEROES } from '../assets.js';
+import { HEROES, iconStyle } from '../assets.js';
 import { TitleBackdrop } from './titlebg.js';
 
 type Mode = 'solo' | 'net';
+/** 未解放キャラの解放条件（キャラ選択の「？？？」行に表示） */
+const UNLOCK_HINT: Record<string, string> = { all5: '5人全員で優勝すると解放', true_hero: 'ラスボスを10回倒すと解放' };
 const stars = (n: number) => (n ? '★'.repeat(n) : 'なし');
 
 /**
@@ -82,6 +84,7 @@ export class Menu extends Phaser.Scene {
         { label: 'ネット対戦をする', on: () => { this.mode = 'net'; this.name(); } },
         { label: '設定', on: () => this.options() },
         { label: '戦績・実績', on: () => this.records() },
+        { label: '遊び方', on: () => this.howto() },
         { label: 'リプレイ再生', on: () => this.loadReplay() },
       ], 'min-width:180px'),
       foot));
@@ -149,7 +152,7 @@ export class Menu extends Phaser.Scene {
         return h('div', { class: 'it off char-it char-locked' },
           h('span', { class: 'hero-thumb', style: `background:url(./assets/img/chars/${HEROES[c.id]}.png) 0 0 / 144px 144px no-repeat;filter:brightness(0)` }),
           h('span', { class: 'char-name' }, '？？？'),
-          h('span', { class: 'char-stats' }, '　5人全員で優勝すると解放'));
+          h('span', { class: 'char-stats' }, `　${UNLOCK_HINT[c.unlock!] ?? '条件を満たすと解放'}`));
       }
       const choose = () => {
         this.charId = c.id;
@@ -258,6 +261,35 @@ export class Menu extends Phaser.Scene {
       { label: `サウンド：${s.sound ? 'ON' : 'OFF'}`, on: () => { update((x) => (x.sound = !x.sound)); if (!store().sound) bgm(null); this.options(); } },
       { label: 'もどる', on: () => this.title() },
     ]));
+  }
+
+  /** 遊び方：基本ルールとアイテム説明。固有アイテムは持ち主のキャラが解放されるまで伏せる */
+  private howto() {
+    const unlocks = Object.keys(store().achievements);
+    const known = (owner?: string) => {
+      if (!owner) return true;
+      const c = CHARS.find((x) => x.key === owner);
+      return !c || charUnlocked(c.id, unlocks);
+    };
+    const RULES = [
+      'サイコロを振ってマスを進み、ラスボスを倒した人が優勝です。ターン上限がある場合は歩数（または所持金）が一番の人が優勝します。',
+      '敵のマスに止まると戦闘。攻撃は1ダイス＋武器の攻撃力、受けるダメージは盾の防御力だけ減ります。',
+      'HPが0になると復活地点（神父・アミュレットで記録）に戻ります。エリクサーがあればその場で全回復します。',
+      '宝箱は運が高いほど良いアイテムが出やすく、運が低いと爆発しやすくなります。',
+    ];
+    const rows = Object.values(ITEMS).map((d) => {
+      const open = known(d.owner);
+      return h('div', { class: 'it off howto-item' },
+        open ? h('span', { class: 'ico', style: iconStyle(d.no) }) : h('span', { class: 'ico howto-secret' }, '？'),
+        h('span', { class: 'howto-text' },
+          h('b', {}, open ? d.name : '？？？'),
+          h('span', { class: 'howto-desc' }, open ? `${d.desc}${d.price ? `（${d.price}G）` : ''}` : 'まだ秘密のアイテム')));
+    });
+    this.show(h('div', {}, '遊び方'),
+      h('div', { class: 'win list howto-list' },
+        h('div', { class: 'howto-h' }, '基本ルール'), ...RULES.map((t) => h('div', { class: 'it off howto-rule' }, t)),
+        h('div', { class: 'howto-h' }, 'アイテム'), ...rows),
+      this.list([{ label: 'もどる', on: () => this.title() }]));
   }
 
   private records() {

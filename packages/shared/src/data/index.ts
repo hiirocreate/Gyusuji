@@ -23,5 +23,5 @@ export const SYSTEM_COLOR = '#FFE650';
 export const CHAT_MAX = 40;
 export const ROOM_SLOTS = 8;
 /** クライアントとサーバのプロトコル版数。不一致なら入室させない */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export type Platform = 'android' | 'ios-web' | 'web';
