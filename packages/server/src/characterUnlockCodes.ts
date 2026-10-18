@@ -6,6 +6,8 @@ const CODE_HASH_TO_CHARACTER_ID = new Map<string, number>([
   ['c6adc8e1ce17dd31291253bc382264d0d6c605a4466eb72abf9c2de3bb7c7ac3', 5],
   ['8f75e81834dbd16fe4033e65d8019b0857536261b93e5b879f193c0fccf88997', 6],
   ['0b3f90bcf6b007db9da78cecdc97e3db5fe00d690719dba4b69a9e1ffa858550', 7],
+  ['f8a319501106e0e83d93949e9cadd5c33c5e40cba649e23cc3ec76643e69dd0b', 8],
+  ['387617ca110326d55b819a83bed8ab210c9860d4048d05d7b16b9ab92aff5319', 9],
 ]);
 
 export function normalizeCharacterUnlockCode(input: unknown): string | null {
