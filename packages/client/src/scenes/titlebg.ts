@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import { C, ENEMIES, GameMap, MAPS } from '@gyusuji/shared';
+import { C, ENEMIES, GameMap, MAPS, charUnlocked } from '@gyusuji/shared';
 import type { Dir } from '@gyusuji/shared';
 import { DIR_ROW, HEROES, NPC_OF, OBJ_OF } from '../assets.js';
 import { drawShoreline, pathTexture, terrainTexture } from './classicTerrain.js';
 import { layout, onLayout } from '../layout.js';
+import { store } from '../store.js';
 
 const T = C.TILE;
 const D: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
@@ -73,7 +74,9 @@ export class TitleBackdrop {
       if (!map.cell(x, y)) break;
     }
     // 主人公たちの隊列
-    HEROES.forEach((k) => {
+    // 解放前のキャラはタイトルにも出さない
+    const unlocks = Object.keys(store().achievements);
+    HEROES.filter((_, id) => charUnlocked(id, unlocks)).forEach((k) => {
       this.shadows.push(s.add.ellipse(0, 0, 22, 7, 0x000000, 0.35));
       this.party.push(s.add.sprite(0, 0, k).setScale(0.72));
     });

@@ -159,6 +159,7 @@ export class GameRoom extends Room<RoomStateS> {
     }
     let seat = -1;
     if (this.state.phase === 'lobby') {
+      this.dropStale(options.friendCode);
       seat = this.state.seats.findIndex((s) => s.kind === 'empty');
     } else if (options.takeSeat !== undefined) {
       // 途中参加：CPU 枠のみ
@@ -245,6 +246,29 @@ export class GameRoom extends Room<RoomStateS> {
   }
 
   // ───── ロビー ─────
+
+  /**
+   * 同じ端末（フレンドコード）の古い接続がロビーに残っていれば席ごと外す。
+   * 退室の通知が届く前に入り直した場合などに、同じ人が2人並ぶのを防ぐ。
+   */
+  private dropStale(friendCode?: string) {
+    if (!friendCode || !/^\d{8}$/.test(friendCode)) return;
+    for (const [sid, m] of [...this.members]) {
+      if (m.seat < 0 || m.friendCode !== friendCode) continue;
+      const s = this.seat(m.seat);
+      s.kind = 'empty';
+      s.name = '';
+      s.ready = false;
+      s.connected = false;
+      this.tokens[m.seat] = '';
+      this.picked.delete(m.seat);
+      this.members.delete(sid);
+      this.unlocks.delete(sid);
+      this.clients.find((c) => c.sessionId === sid)?.leave(4002, '別の接続で入り直しました');
+    }
+    this.updateMeta();
+    this.fixHost();
+  }
 
   private bindSeat(client: Client, seat: number, token: string, friendCode?: string, platform?: string) {
     const fc = friendCode && /^\d{8}$/.test(friendCode) ? friendCode : undefined;

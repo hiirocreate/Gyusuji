@@ -170,13 +170,27 @@ export class Net {
     return { name: store().name, friendCode: store().friendCode, protocol: PROTOCOL_VERSION, platform: platform(), unlocks: Object.keys(store().achievements), ...extra };
   }
 
+  /** 入室処理は同時に1つだけ（連打や通信待ち中の再タップで二重入室しないように） */
+  private joining: Promise<void> | null = null;
+  private once(f: () => Promise<Room>): Promise<void> {
+    if (this.joining) return this.joining;
+    this.joining = (async () => {
+      try {
+        this.attach(await f());
+      } finally {
+        this.joining = null;
+      }
+    })();
+    return this.joining;
+  }
+
   async create(isPublic: boolean): Promise<void> {
-    this.attach(await this.cl().create('game', this.opts({ public: isPublic })));
+    await this.once(() => this.cl().create('game', this.opts({ public: isPublic })));
   }
 
   /** 部屋選択（8部屋）。部屋が無ければ作る */
   async joinSlot(slot: number): Promise<void> {
-    this.attach(await this.cl().joinOrCreate('game', this.opts({ slot })));
+    await this.once(() => this.cl().joinOrCreate('game', this.opts({ slot })));
   }
 
   async slots(): Promise<{ slot: number; players: number; phase: string; roomId: string | null }[]> {
@@ -190,7 +204,7 @@ export class Net {
   }
 
   async joinById(roomId: string, extra: Record<string, unknown> = {}): Promise<void> {
-    this.attach(await this.cl().joinById(roomId, this.opts(extra)));
+    await this.once(() => this.cl().joinById(roomId, this.opts(extra)));
   }
 
   async joinByCode(code: string): Promise<void> {
@@ -253,6 +267,12 @@ export class Net {
   }
 
   private attach(room: Room): void {
+    // 前の部屋の接続が残っていれば閉じる（残ると同じ人が2人いる状態になる）
+    const old = this.room;
+    if (old && old !== room) {
+      this.room = null;
+      void old.leave(true);
+    }
     this.room = room;
     this.seat = -1;
     this.host = null;
