@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { C, ENEMIES, GameMap, ITEMS, MAPS } from '@gyusuji/shared';
 import type { Ask, GameEvent, PublicPlayer, PublicView } from '@gyusuji/shared';
-import { Tracker, unlock } from '../achievements.js';
+import { Tracker } from '../achievements.js';
 import { DIR_ROW, HEROES, NPC_OF, OBJ_OF, iconStyle } from '../assets.js';
 import { bgm, se } from '../audio.js';
 import { buildChatBar, closeLog, notify, say, setSender, system } from '../chat.js';
@@ -708,10 +708,7 @@ export class Field extends Phaser.Scene {
         bgm('win');
         se('win');
         this.tracker.gameOver(e.winner, this.host.kind !== 'replay' && !this.host.spectator);
-        if (this.host.tutorial) {
-          unlock('tutorial');
-          update((s) => (s.tutorialDone = true));
-        }
+        if (this.host.tutorial) update((s) => (s.tutorialDone = true));
         this.applyView(end);
         this.result(e.winner);
         return;

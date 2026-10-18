@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { C, CHARS, DEFAULT_SETTINGS, MAP_NAMES } from '@gyusuji/shared';
+import { BASE_CHAR_COUNT, C, CHARS, DEFAULT_SETTINGS, MAP_NAMES, charUnlocked } from '@gyusuji/shared';
 import type { SeatInit, Settings } from '@gyusuji/shared';
 import { ACHIEVEMENTS } from '../achievements.js';
 import { bgm, se } from '../audio.js';
@@ -140,7 +140,16 @@ export class Menu extends Phaser.Scene {
   }
 
   chars() {
-    const rows = CHARS.map((c) => {
+    const unlocks = Object.keys(store().achievements);
+    // 隠し実績で解放されるキャラは解放されるまで表示しない
+    const shown = CHARS.filter((c) => c.unlock !== 'meanie' || charUnlocked(c.id, unlocks));
+    const rows = shown.map((c) => {
+      if (!charUnlocked(c.id, unlocks)) {
+        return h('div', { class: 'it off char-it char-locked' },
+          h('span', { class: 'hero-thumb', style: `background:url(./assets/img/chars/${HEROES[c.id]}.png) 0 0 / 144px 144px no-repeat;filter:brightness(0)` }),
+          h('span', { class: 'char-name' }, '？？？'),
+          h('span', { class: 'char-stats' }, '　5人全員で優勝すると解放'));
+      }
       const choose = () => {
         this.charId = c.id;
         if (this.mode === 'net') {
@@ -183,7 +192,7 @@ export class Menu extends Phaser.Scene {
 
   private startSolo() {
     const seats: SeatInit[] = [{ name: store().name, charId: this.charId, isCpu: false }];
-    this.cpus.forEach((on, i) => on && seats.push({ name: `CPU${i + 1}`, charId: (this.charId + 1 + i) % CHARS.length, isCpu: true }));
+    this.cpus.forEach((on, i) => on && seats.push({ name: `CPU${i + 1}`, charId: (this.charId + 1 + i) % BASE_CHAR_COUNT, isCpu: true }));
     this.scene.start('Field', { host: new LocalHost(this.settings, seats) });
   }
 
@@ -253,7 +262,7 @@ export class Menu extends Phaser.Scene {
   private records() {
     const st = store().stats;
     this.show(h('div', {}, `対戦数 ${st.games}　優勝数 ${st.wins}　ラスボス撃破 ${st.lastBossKills}`),
-      h('div', { class: 'win list', style: 'max-height:200px;overflow:auto' }, ...ACHIEVEMENTS.map((a) => h('div', { class: 'it off', style: `color:${store().achievements[a.id] ? '#ffe650' : '#889'}` }, `${a.name}：${a.desc}`))),
+      h('div', { class: 'win list', style: 'max-height:200px;overflow:auto' }, ...ACHIEVEMENTS.filter((a) => !a.hidden || store().achievements[a.id]).map((a) => h('div', { class: 'it off', style: `color:${store().achievements[a.id] ? '#ffe650' : '#889'}` }, `${a.name}：${a.desc}`))),
       this.list([{ label: 'もどる', on: () => this.title() }]));
   }
 

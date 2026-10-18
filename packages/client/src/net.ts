@@ -167,7 +167,7 @@ export class Net {
   }
 
   private opts(extra: Record<string, unknown> = {}) {
-    return { name: store().name, friendCode: store().friendCode, protocol: PROTOCOL_VERSION, platform: platform(), ...extra };
+    return { name: store().name, friendCode: store().friendCode, protocol: PROTOCOL_VERSION, platform: platform(), unlocks: Object.keys(store().achievements), ...extra };
   }
 
   async create(isPublic: boolean): Promise<void> {

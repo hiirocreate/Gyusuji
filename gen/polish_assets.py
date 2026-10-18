@@ -116,7 +116,19 @@ def build_items():
     im=frame();d=ImageDraw.Draw(im); rr(d,(27,26,69,69),5,'#fff1ca',INK,4); ell(d,(24,24,34,72),'#e8c16c',INK,3); ell(d,(62,24,72,72),'#e8c16c',INK,3); line(d,[(39,36),(58,36)],'#b98c50',2); line(d,[(39,44),(56,44)],'#b98c50',2); poly(d,[(48,48),(56,56),(48,64),(40,56)],'#438ce9',WHITE,2); out.append(im)
     # 25. Little wooden substitute doll with red scarf.
     im=frame();d=ImageDraw.Draw(im); ell(d,(31,18,65,49),'#f5e5d2',INK,4); rr(d,(37,39,59,68),8,'#b68152',INK,4); ell(d,(39,30,44,36),INK,None); ell(d,(53,30,58,36),INK,None); line(d,[(41,45),(55,45)],'#d8415b',4); poly(d,[(34,45),(27,51),(35,55),(43,49)],'#eb4c59',INK,2); line(d,[(40,64),(36,73)],'#73523e',4); line(d,[(56,64),(60,73)],'#73523e',4); out.append(im)
-    assert len(out)==25, len(out)
+    # 26. Hunter's quick bow: curved wood limb, taut string and nocked arrow.
+    im=frame();d=ImageDraw.Draw(im); d.arc(xy((14,14))+xy((62,82)),-62,62,fill=INK,width=10*S); d.arc(xy((14,14))+xy((62,82)),-60,60,fill='#b8743f',width=5*S); line(d,[(52,20),(52,76)],'#fff4d8',2); line(d,[(24,48),(74,48)],'#8a5a3a',4); poly(d,[(74,41),(86,48),(74,55)],'#dce8f8',INK,2); poly(d,[(24,48),(16,41),(21,48),(16,55)],'#ef535e',INK,2); out.append(im)
+    # 27. Chef's secret pot: black pot, golden lid knob and rising steam.
+    im=frame();d=ImageDraw.Draw(im); line(d,[(36,30),(39,21),(36,13)],'#e8eef7',3); line(d,[(56,30),(59,21),(56,13)],'#e8eef7',3); rr(d,(18,44,30,52),4,'#59506a',INK,3); rr(d,(66,44,78,52),4,'#59506a',INK,3); poly(d,[(24,42),(72,42),(68,70),(60,76),(36,76),(28,70)],'#4a4458',INK,4); line(d,[(31,52),(65,52)],'#ffcf56',3); ell(d,(22,34,74,46),'#7a7290',INK,3); ell(d,(43,28,53,37),'#ffcf56',INK,2); ell(d,(31,58,37,64),'#ffffff60',None); out.append(im)
+    # 28. Joker card: tilted white card, red/purple corners and a jester grin.
+    im=frame();d=ImageDraw.Draw(im); poly(d,[(30,14),(70,22),(62,80),(22,72)],'#fffdf6',INK,4); poly(d,[(34,20),(66,26),(59,74),(27,68)],'#f3e9ff','#9c5ad6',2); poly(d,[(37,40),(46,30),(50,40),(58,32),(60,46),(36,50)],'#9c5ad6',INK,2); ell(d,(41,47,57,63),'#fff1d8',INK,2); line(d,[(44,57),(48,60),(54,57)],'#d63e45',2); ell(d,(47,52,51,56),'#e53935',None); txt(d,(33,24),'J','#d63e45'); out.append(im)
+    # 29. Chaos die: violet cube with mismatched rainbow pips and a spark.
+    im=frame();d=ImageDraw.Draw(im); a=(48,10); b=(82,29); m=(48,49); q=(14,29); l=(14,68); z=(48,88); r=(82,68)
+    poly(d,[a,b,m,q],'#c792ff',INK,3); poly(d,[q,m,z,l],'#8a4fd8',INK,3); poly(d,[b,r,z,m],'#6a35b0',INK,3)
+    for (x,y),c in zip([(48,22),(36,29),(60,29),(48,36)],['#ff5a6a','#ffd54f','#5ee07a','#56b6ff']): ell(d,(x-4.5,y-4.5,x+4.5,y+4.5),c,INK,1)
+    for (x,y),c in zip([(24,47),(38,66),(31,57)],['#ffd54f','#ff5a6a','#fffdf6']): ell(d,(x-4.5,y-4.5,x+4.5,y+4.5),c,INK,1)
+    txt(d,(65,58),'?','#ffe86b',stroke_width=1,stroke_fill=INK); poly(d,[(80,8),(83,15),(90,17),(83,20),(80,27),(77,20),(70,17),(77,15)],'#fff3a0',INK,1); out.append(im)
+    assert len(out)==29, len(out)
     atlas=Image.new('RGBA',(F*len(out),F),(0,0,0,0))
     for i,im in enumerate(out): atlas.alpha_composite(finish(im),(i*F,0))
     atlas.save(OUT/'items/icons-hd.png', optimize=True)
@@ -193,7 +205,7 @@ def main():
     idx_path=OUT/'assets_index.json'
     idx=json.loads(idx_path.read_text())
     additions={
-      'items/icons-hd': {'frame':[96,96],'frames':25,'note':'High-resolution clear-silhouette icon atlas; order matches item numbers 1–25'},
+      'items/icons-hd': {'frame':[96,96],'frames':29,'note':'High-resolution clear-silhouette icon atlas; order matches item numbers 1–29'},
       'dice/faces-hd': {'frame':[96,96],'frames':6,'note':'High-resolution simplified one-to-six dice'},
       'dice/roll-hd': {'frame':[96,96],'frames':8,'note':'High-resolution tumbling dice frames'},
       'dice/ichi-hd': {'frame':[96,96],'frames':1,'note':'High-resolution special guaranteed-one gold die'},

@@ -4,10 +4,11 @@ import {
 } from '../src/index.js';
 import type { MapId } from '../src/index.js';
 import { seats, simulate } from './sim.js';
+import { cpuDecide, Rand } from '../src/index.js';
 
 describe('データ', () => {
   it('キャラ初期値', () => {
-    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2]]);
+    expect(CHARS.map((c) => [c.hp, c.mp, c.luck])).toEqual([[14, 10, 2], [12, 14, 0], [10, 20, 4], [15, 0, 1], [12, 14, 2], [12, 4, 3], [13, 8, 2], [12, 16, 2]]);
   });
   it('敵', () => {
     expect(ENEMIES.enemy_slime.hp).toBe(4);
@@ -167,5 +168,121 @@ describe('ぱるぷん玉<極>', () => {
     expect(JSON.stringify(r.game.view())).not.toContain('kiwami');
     // paru イベント以外で kiwami を含むものは無い
     for (const e of events) if (e.t !== 'paru') expect(JSON.stringify(e)).not.toContain('kiwami');
+  });
+});
+
+describe('固有アイテム', () => {
+  const run = (charId: number, seed: number) => {
+    const ss = seats(2).map((s, i) => (i === 0 ? { ...s, charId } : s));
+    const r = new Runner({ ...DEFAULT_SETTINGS, map: 0 }, ss, seed);
+    const cr = new Rand(seed ^ 0x5555);
+    const events = r.drain();
+    for (let i = 0; r.ask && i < 200000; i++) {
+      r.submit(cpuDecide(r.game, r.ask, cr));
+      events.push(...r.drain());
+    }
+    return { r, events };
+  };
+  it('初期所持品', () => {
+    expect(CHARS[5].items).toEqual([ITEM.hunter_bow, ITEM.dice, ITEM.apple, ITEM.amulet]);
+    expect(CHARS[6].items).toEqual([ITEM.secret_pot, ITEM.apple, ITEM.apple, ITEM.amulet]);
+  });
+  it('早撃ちの弓：戦闘開始直後に1ダイスの先制', () => {
+    let n = 0;
+    for (const seed of [1, 2, 3]) {
+      const { r, events } = run(5, seed);
+      expect(r.game.over).toBe(true);
+      events.forEach((e, i) => {
+        if (e.t !== 'battleStart' || e.seat !== 0) return;
+        const d = events.slice(i).find((x) => x.t === 'dice') as any;
+        const h = events.slice(i).find((x) => x.t === 'battleHit') as any;
+        if (d.values.length === 1 && d.purpose === 'attack' && h.target === 'enemy' && h.amount === d.values[0]) n++;
+      });
+    }
+    expect(n).toBeGreaterThan(0);
+  });
+  it('秘伝の鍋：りんごは3ダイス＋2', () => {
+    let n = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const { events } = run(6, seed);
+      events.forEach((e, i) => {
+        if (e.t !== 'itemUse' || e.seat !== 0 || e.item !== ITEM.apple) return;
+        const d = events.slice(i).find((x) => x.t === 'dice') as any;
+        expect(d.purpose).toBe('heal');
+        expect(d.values.length).toBe(3);
+        n++;
+      });
+    }
+    expect(n).toBeGreaterThan(0);
+  });
+  it('鍋が無ければりんごは2ダイス', () => {
+    const { events } = run(0, 1);
+    events.forEach((e, i) => {
+      if (e.t !== 'itemUse' || e.seat !== 0 || e.item !== ITEM.apple) return;
+      expect((events.slice(i).find((x) => x.t === 'dice') as any).values.length).toBe(2);
+    });
+  });
+});
+
+describe('ヒーロ（ピエロ）', () => {
+  const run = (seed: number, prefer: number[]) => {
+    const ss = seats(3).map((s, i) => (i === 0 ? { ...s, charId: 7 } : s));
+    const r = new Runner({ ...DEFAULT_SETTINGS, map: 0 }, ss, seed);
+    const cr = new Rand(seed ^ 0x5555);
+    const events = r.drain();
+    for (let i = 0; r.ask && i < 200000; i++) {
+      const a = r.ask;
+      let inp = cpuDecide(r.game, a, cr);
+      if (a.seat === 0 && (a.kind === 'action' || a.kind === 'battle')) {
+        const me = r.game.players[0];
+        const slot = a.items.find((s) => prefer.includes(me.items[s].id));
+        if (slot !== undefined) inp = { type: 'useItem', slot };
+      }
+      expect(r.submit(inp)).toBe(true);
+      events.push(...r.drain());
+    }
+    return { r, events };
+  };
+  it('狂乱のサイコロは消えず、最後まで手元に残る', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { r, events } = run(seed, [ITEM.chaos_dice]);
+      expect(r.game.over).toBe(true);
+      expect(r.game.players[0].items.some((it) => it.id === ITEM.chaos_dice)).toBe(true);
+      const faces = events.filter((e) => e.t === 'dice' && e.purpose === 'chaos').map((e: any) => e.values[0]);
+      expect(new Set(faces).size).toBe(6);
+      expect(events.some((e) => e.t === 'loseItem' && e.item === ITEM.chaos_dice)).toBe(false);
+    }
+  });
+  it('狂乱の6は9として移動に加わる', () => {
+    let n = 0;
+    const { events } = run(2, [ITEM.chaos_dice]);
+    events.forEach((e, i) => {
+      if (e.t !== 'dice' || e.purpose !== 'chaos' || e.values[0] !== 6 || e.seat !== 0) return;
+      const mv = events.slice(i + 1).find((x) => x.t === 'dice') as any;
+      if (mv.purpose !== 'move') return;
+      const rest = events.slice(i + 1);
+      const until = rest.findIndex((x) => x.t === 'turn' || x.t === 'battleStart' || x.t === 'death' || x.t === 'msg' && x.text.includes('分かれ道'));
+      const cells = rest.slice(0, until < 0 ? undefined : until).filter((x) => x.t === 'move').reduce((a, x: any) => a + x.cells.length, 0);
+      expect(cells).toBeLessThanOrEqual(mv.values.reduce((a: number, b: number) => a + b, 0) + 9);
+      n++;
+    });
+    expect(n).toBeGreaterThan(0);
+  });
+  it('ジョーカーの札はMP2を使い、いじわるイベントを出す', () => {
+    const { r, events } = run(3, [ITEM.joker]);
+    expect(r.game.over).toBe(true);
+    expect(events.filter((e) => e.t === 'itemUse' && e.item === ITEM.joker).length).toBeGreaterThan(0);
+    expect(events.some((e) => e.t === 'meddle' && e.seat === 0)).toBe(true);
+  });
+  it('吸収玉で狂乱のサイコロは奪われない', () => {
+    const ss = seats(2).map((s, i) => ({ ...s, charId: i === 0 ? 1 : 7 }));
+    const r = new Runner({ ...DEFAULT_SETTINGS }, ss, 1);
+    const [a, b] = r.game.players;
+    a.items = [{ id: ITEM.amulet }, { id: ITEM.absorb }];
+    b.items = [{ id: ITEM.chaos_dice }];
+    expect(r.submit({ type: 'useItem', slot: 1 })).toBe(true);
+    const ev = r.drain();
+    expect(b.items.map((i) => i.id)).toEqual([ITEM.chaos_dice]);
+    expect(ev.some((e) => e.t === 'meddle' && e.seat === 0)).toBe(true);
   });
 });

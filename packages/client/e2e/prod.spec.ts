@@ -7,7 +7,7 @@ async function open(browser: Browser, name: string, ua: string, vp: { width: num
   const ctx = await browser.newContext({ userAgent: ua, viewport: vp, deviceScaleFactor: 2, hasTouch: true });
   const p = await ctx.newPage();
   await p.addInitScript((n) => localStorage.setItem('beefhunter.v1', JSON.stringify({ name: n, speed: 3, sound: false })), name);
-  await p.goto('https://gyusuji.h-onoue-test.workers.dev/');
+  await p.goto('https://gyusuji.battle-sugoroku.workers.dev/');
   await p.locator('.press').click();
   await p.getByText('ネット対戦をする').click();
   await p.getByText('決定').click();
@@ -27,6 +27,7 @@ async function step(p: Page) {
 }
 
 test.skip(!process.env.PROD_E2E, '本番環境の確認用（PROD_E2E=1 で実行）');
+test.setTimeout(420000);
 test('本番：iPhone(縦)とAndroid(横)が同じ部屋で対戦', async ({ browser }) => {
   const a = await open(browser, 'あい', IPHONE, { width: 390, height: 844 });
   const b = await open(browser, 'びー', ANDROID, { width: 844, height: 390 });

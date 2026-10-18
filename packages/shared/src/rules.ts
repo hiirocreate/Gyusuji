@@ -105,6 +105,14 @@ function removeSlot(g: Game, p: PlayerState, slot: number, silent = true): ItemI
   if (!silent) g.emit({ t: 'loseItem', seat: p.seat, item: it.id });
   return it;
 }
+/** 奪われる・失う対象になる枠（狂乱のサイコロ等は除く） */
+function lossSlots(p: PlayerState): number[] {
+  return p.items.flatMap((it, i) => (ITEMS[it.id].noLoss ? [] : [i]));
+}
+/** ランダムに1枠失う（候補が無ければ null） */
+function loseRandom(g: Game, p: PlayerState, slots = lossSlots(p)): ItemInst | null {
+  return slots.length ? removeSlot(g, p, slots[g.rand.int(slots.length)], false) : null;
+}
 function consume(p: PlayerState, id: number): boolean {
   const i = p.items.findIndex((it) => it.id === id);
   if (i < 0) return false;
@@ -128,6 +136,10 @@ function heal(g: Game, p: PlayerState, n: number): void {
   const before = p.hp;
   p.hp = Math.min(p.maxHp, p.hp + n);
   g.emit({ t: 'heal', seat: p.seat, amount: p.hp - before });
+}
+/** りんごの回復量。秘伝の鍋があれば3ダイス＋2 */
+function appleHeal(g: Game, p: PlayerState): number {
+  return has(p, ITEM.secret_pot) ? roll(g, p, 3, 'heal') + 2 : roll(g, p, 2, 'heal');
 }
 function fullHeal(g: Game, p: PlayerState, mp = false): void {
   heal(g, p, p.maxHp);
@@ -295,13 +307,13 @@ function* takeTurn(g: Game, p: PlayerState): Flow {
   }
 }
 
-function* move(g: Game, p: PlayerState, nDice: number, ichi: boolean): Flow {
+function* move(g: Game, p: PlayerState, nDice: number, ichi: boolean, bonus = 0): Flow {
   let steps: number;
   if (ichi) {
     g.emit({ t: 'dice', seat: p.seat, values: [1], ichi: true, purpose: 'move' });
     steps = 1;
   } else {
-    steps = roll(g, p, nDice, 'move');
+    steps = roll(g, p, nDice, 'move') + bonus;
   }
   let cells: { x: number; y: number }[] = [];
   const flush = () => {
@@ -544,6 +556,19 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
     g.emit({ t: 'battleEnd', seat: p.seat, result });
     g.battle = null;
   };
+  if (has(p, ITEM.hunter_bow)) {
+    // 早撃ちの弓：手番の前に先制で1ダイス（武器・防御は無関係）
+    g.msg(`${p.name}は早撃ちの弓を放った！`, p.seat);
+    const dmg = roll(g, p, 1, 'attack');
+    st.hp = Math.max(0, st.hp - dmg);
+    g.battle.hp = st.hp;
+    g.emit({ t: 'battleHit', seat: p.seat, target: 'enemy', amount: dmg, fx: 'hit' });
+    if (st.hp <= 0) {
+      end('win');
+      yield* victory(g, p, idx);
+      return;
+    }
+  }
   for (;;) {
     const inp = yield { kind: 'battle', seat: p.seat, items: usableSlots(p, 'battle') };
     let dmg = -1;
@@ -556,11 +581,11 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
       g.msg(`${p.name}は${d.name}を使った！`, p.seat);
       g.emit({ t: 'itemUse', seat: p.seat, item: it.id });
       if (d.kind === 'magic') p.mp -= d.mp ?? 0;
-      else removeSlot(g, p, inp.slot, false);
+      else if (!d.keep) removeSlot(g, p, inp.slot, false);
       switch (it.id) {
         case ITEM.apple:
           g.emit({ t: 'fx', name: 'heal', seat: p.seat });
-          heal(g, p, roll(g, p, 2, 'heal'));
+          heal(g, p, appleHeal(g, p));
           break;
         case ITEM.mag_heal:
           g.emit({ t: 'fx', name: 'heal', seat: p.seat });
@@ -574,6 +599,15 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
           g.emit({ t: 'dice', seat: p.seat, values: [1], ichi: true, purpose: 'attack' });
           dmg = 1;
           break;
+        case ITEM.chaos_dice: {
+          const v = chaosDie(g, p, true);
+          if (v < 0) {
+            end('lose');
+            return;
+          }
+          if (st.hp > 0) dmg = Math.max(0, roll(g, p, 1 + (has(p, ITEM.sword_orb) ? 1 : 0), 'attack') + v + weaponAtk(p) - e.def);
+          break;
+        }
         case ITEM.mag_fire:
           fx = 'fire';
           dmg = roll(g, p, 2, 'attack');
@@ -649,11 +683,12 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
   g.msg(`${p.name}は${d.name}を使った！`, p.seat);
   g.emit({ t: 'itemUse', seat: p.seat, item: it.id });
   if (d.kind === 'magic') p.mp -= d.mp ?? 0;
-  else removeSlot(g, p, slot, false);
+  else if (!d.keep) removeSlot(g, p, slot, false);
+  if (MEDDLE.includes(it.id) && g.players.length > 1) g.emit({ t: 'meddle', seat: p.seat });
   switch (it.id) {
     case ITEM.apple:
       g.emit({ t: 'fx', name: 'heal', seat: p.seat });
-      heal(g, p, roll(g, p, 2, 'heal'));
+      heal(g, p, appleHeal(g, p));
       return;
     case ITEM.amulet:
       setRespawn(g, p);
@@ -702,7 +737,7 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
       return;
     }
     case ITEM.absorb: {
-      const cand = g.players.filter((q) => q !== p && q.items.length > 0);
+      const cand = g.players.filter((q) => q !== p && lossSlots(q).length > 0);
       if (!cand.length) {
         g.msg('しかし何も起こらなかった', p.seat);
         return;
@@ -710,7 +745,7 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
       const q = g.rand.pick(cand);
       g.emit({ t: 'fx', name: 'absorb', seat: q.seat });
       if (blockedByDoll(g, q)) return;
-      const stolen = removeSlot(g, q, g.rand.int(q.items.length), false);
+      const stolen = loseRandom(g, q)!;
       g.msg(`${q.name}から${ITEMS[stolen.id].name}を奪った！`, p.seat);
       if (!giveItem(g, p, stolen.id, stolen)) g.msg('…が持ちきれず捨てた', p.seat);
       return;
@@ -723,6 +758,14 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
       }
       g.msg('自分以外の全員が呪われた！', p.seat);
       return;
+    case ITEM.joker:
+      joker(g, p);
+      return;
+    case ITEM.chaos_dice: {
+      const v = chaosDie(g, p, false);
+      if (v > 0) yield* move(g, p, has(p, ITEM.run_shoes) ? 2 : 1, false, v);
+      return;
+    }
     case ITEM.warp_scroll:
       p.x = p.respawn.x;
       p.y = p.respawn.y;
@@ -732,6 +775,91 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
       g.msg('復活地点へワープした！', p.seat);
       return;
   }
+}
+
+/** 他のプレイヤーに向けて使うアイテム（いじわるマスター用） */
+const MEDDLE: number[] = [ITEM.piyo, ITEM.absorb, ITEM.curse, ITEM.paru];
+
+/** ジョーカーの札：3パターンのどれか */
+function joker(g: Game, p: PlayerState): void {
+  const r = g.rand.int(3);
+  if (r === 0) {
+    g.msg(`ババを引いた！ ${p.name}に3ダメージ`, p.seat);
+    hurt(g, p, 3);
+  } else if (r === 1) {
+    const q = g.rand.pick(g.players);
+    g.msg(`${q.name}に2ダメージ！`, p.seat);
+    if (q !== p) {
+      g.emit({ t: 'meddle', seat: p.seat });
+      if (blockedByDoll(g, q)) return;
+    }
+    hurt(g, q, 2);
+  } else {
+    g.msg('ジョーカーが笑った！ MPが2回復し、他の全員に5ダメージ！', p.seat);
+    p.mp = Math.min(p.maxMp, p.mp + 2);
+    const others = orderFrom(g, p).filter((q) => q !== p);
+    if (others.length) g.emit({ t: 'meddle', seat: p.seat });
+    for (const q of others) if (!blockedByDoll(g, q)) hurt(g, q, 5);
+  }
+}
+
+/**
+ * 狂乱のサイコロ：出目の特殊効果を処理し、移動・攻撃に加える値を返す（6は9）。
+ * 戦闘中に自分が倒れたら -1、通常時に倒れたら 0（移動しない）。
+ */
+function chaosDie(g: Game, p: PlayerState, inBattle: boolean): number {
+  const face = g.rand.die();
+  g.emit({ t: 'dice', seat: p.seat, values: [face], purpose: 'chaos' });
+  const value = face === 6 ? 9 : face;
+  let fate: 'alive' | 'revived' | 'dead' = 'alive';
+  switch (face) {
+    case 1:
+      g.msg('狂乱の1！ 自分に1ダメージ', p.seat);
+      fate = hurt(g, p, 1);
+      break;
+    case 2: {
+      g.msg('狂乱の2！ アイテムをひとつ失った', p.seat);
+      loseRandom(g, p, lossSlots(p).filter((i) => !ITEMS[p.items[i].id].unique));
+      break;
+    }
+    case 3:
+      g.msg('狂乱の3！ りんごを手に入れた', p.seat);
+      if (!giveItem(g, p, ITEM.apple)) g.msg('…が持ちきれない', p.seat);
+      break;
+    case 4:
+      if (inBattle) {
+        const b = g.battle!;
+        if (g.rand.int(2) === 0) {
+          g.msg('狂乱の4！ 敵に99ダメージ！', p.seat);
+          const st = g.objs[b.obj];
+          st.hp = Math.max(0, st.hp - 99);
+          b.hp = st.hp;
+          g.emit({ t: 'battleHit', seat: p.seat, target: 'enemy', amount: 99, fx: 'hit' });
+        } else {
+          g.msg(`狂乱の4！ ${p.name}に99ダメージ！`, p.seat);
+          g.emit({ t: 'battleHit', seat: p.seat, target: 'player', amount: 99, fx: 'hit' });
+          fate = hurt(g, p, 99);
+        }
+      } else {
+        const q = g.rand.pick(g.players);
+        g.msg(`狂乱の4！ ${q.name}に99ダメージ！`, p.seat);
+        if (q !== p) {
+          g.emit({ t: 'meddle', seat: p.seat });
+          if (!blockedByDoll(g, q)) hurt(g, q, 99);
+        } else fate = hurt(g, p, 99);
+      }
+      break;
+    case 5:
+      g.msg('狂乱の5！ HPが2回復', p.seat);
+      g.emit({ t: 'fx', name: 'heal', seat: p.seat });
+      heal(g, p, 2);
+      break;
+    case 6:
+      g.msg('狂乱の6！ 出目は9になる！', p.seat);
+      break;
+  }
+  if (fate === 'dead') return inBattle ? -1 : 0;
+  return value;
 }
 
 function paru(g: Game, p: PlayerState): void {
@@ -753,7 +881,7 @@ function paru(g: Game, p: PlayerState): void {
       return;
     case 4:
       g.msg('全員アイテムをひとつ失った！');
-      for (const q of all) if (q.items.length) removeSlot(g, q, g.rand.int(q.items.length), false);
+      for (const q of all) loseRandom(g, q);
       return;
     case 5:
       g.msg('今年はりんごが豊作だ！');
@@ -803,11 +931,12 @@ function paruKiwami(g: Game, p: PlayerState): void {
       return;
     case 4: {
       g.msg('大強奪！', p.seat);
-      const plan = others.map((q) => ({ q, k: Math.ceil(q.items.length / 2) }));
+      const plan = others.map((q) => ({ q, k: Math.ceil(lossSlots(q).length / 2) }));
       for (const { q, k } of plan) {
         g.emit({ t: 'fx', name: 'absorb', seat: q.seat });
-        for (let i = 0; i < k && q.items.length; i++) {
-          const it = removeSlot(g, q, g.rand.int(q.items.length), false);
+        for (let i = 0; i < k; i++) {
+          const it = loseRandom(g, q);
+          if (!it) break;
           if (freeSlots(p) > 0) giveItem(g, p, it.id, it); // 入りきらない分は破棄
         }
       }
@@ -828,7 +957,7 @@ function paruKiwami(g: Game, p: PlayerState): void {
         swapPos(g, p, top);
         return;
       }
-      if (p.items.length) removeSlot(g, p, g.rand.int(p.items.length), false);
+      loseRandom(g, p);
       giveItem(g, p, ITEM.paru);
       giveItem(g, p, ITEM.paru);
       return;

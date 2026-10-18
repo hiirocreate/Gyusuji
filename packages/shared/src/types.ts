@@ -175,4 +175,6 @@ export type GameEvent =
   | { t: 'warp'; seat: number }
   | { t: 'stun'; seat: number; turns: number }
   | { t: 'curse'; seat: number }
+  /** 他のプレイヤーに向けてアイテムを使った（実績用） */
+  | { t: 'meddle'; seat: number }
   | { t: 'gameOver'; winner: number; reason: string };
