@@ -118,3 +118,13 @@ body { font-family: system-ui, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Mei
 .result-action { width: 100%; min-height: 38px; padding: 5px 10px; border: 2px solid #fff0c6; border-radius: 8px; background: linear-gradient(180deg, #ffd75e 0%, #f8a743 100%); box-shadow: 0 3px 0 #9f4d34, inset 0 1px 0 #fff7d9; color: #40294b; font: inherit; font-weight: 900; cursor: pointer; touch-action: manipulation; }
 .result-action:active { transform: translateY(2px); box-shadow: 0 1px 0 #9f4d34; }
 .result-action:disabled { opacity: .72; cursor: wait; }
+
+/* 遊び方：基本ルールとアイテム説明（固有アイテムは解放まで伏せる） */
+.howto-list { width: min(560px, calc(100% - 20px)); max-height: 210px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+#stage[data-orient="port"] .howto-list { max-height: 440px; }
+.howto-h { flex: none; color: #ffe650; font-weight: bold; font-size: 13px; padding: 4px 4px 0; }
+.howto-list .it { flex: none; height: auto; white-space: normal; overflow-wrap: anywhere; align-items: flex-start; line-height: 1.4; padding: 4px 8px; color: #e8ecff; }
+.howto-rule { font-size: 12px; }
+.howto-text { display: flex; flex-direction: column; min-width: 0; }
+.howto-desc { font-size: 11px; opacity: .85; }
+.howto-secret { display: inline-flex; align-items: center; justify-content: center; background: #2a2850; border: 1px solid #ffffff33; border-radius: 6px; color: #9aa; font-weight: bold; }

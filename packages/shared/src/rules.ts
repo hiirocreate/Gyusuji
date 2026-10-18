@@ -88,11 +88,19 @@ export class Game {
 
 // ───────── 基本ヘルパ ─────────
 
+/** 勇者（剣・盾・回復が+1、真の勇者の装備、ノロイ不可、倒れるとアイテム入手） */
+export function isBrave(p: PlayerState): boolean {
+  return CHARS[p.charId]?.key === 'brave';
+}
+/** 勇者は剣・盾の値が+1（真の勇者の装備は変化済みなので加算しない） */
+function braveBonus(p: PlayerState, id: number): number {
+  return isBrave(p) && !ITEMS[id].unique ? 1 : 0;
+}
 export function weaponAtk(p: PlayerState): number {
-  return p.items.reduce((a, it) => Math.max(a, ITEMS[it.id].atk ?? 0), 0);
+  return p.items.reduce((a, it) => Math.max(a, ITEMS[it.id].atk ? ITEMS[it.id].atk! + braveBonus(p, it.id) : 0), 0);
 }
 export function shieldDef(p: PlayerState): number {
-  return p.items.reduce((a, it) => Math.max(a, ITEMS[it.id].kind === 'shield' ? (ITEMS[it.id].def ?? 0) : 0), 0);
+  return p.items.reduce((a, it) => Math.max(a, ITEMS[it.id].kind === 'shield' ? (ITEMS[it.id].def ?? 0) + braveBonus(p, it.id) : 0), 0);
 }
 export function has(p: PlayerState, id: number): boolean {
   return p.items.some((it) => it.id === id);
@@ -139,7 +147,7 @@ function heal(g: Game, p: PlayerState, n: number): void {
 }
 /** りんごの回復量。秘伝の鍋があれば3ダイス＋2 */
 function appleHeal(g: Game, p: PlayerState): number {
-  return has(p, ITEM.secret_pot) ? roll(g, p, 3, 'heal') + 2 : roll(g, p, 2, 'heal');
+  return (has(p, ITEM.secret_pot) ? roll(g, p, 3, 'heal') + 2 : roll(g, p, 2, 'heal')) + (isBrave(p) ? 1 : 0);
 }
 function fullHeal(g: Game, p: PlayerState, mp = false): void {
   heal(g, p, p.maxHp);
@@ -149,6 +157,7 @@ function fullHeal(g: Game, p: PlayerState, mp = false): void {
 /** 入手可能か（ショップ・鍛冶屋の判定） */
 /** 魔王の角の持ち主が持てないアイテム（入手しても消える） */
 function forbidden(p: PlayerState, id: number): boolean {
+  if (isBrave(p) && id === ITEM.curse) return true;
   return has(p, ITEM.demon_horn) && (id === ITEM.amulet || id === ITEM.hero_sword || id === ITEM.hero_shield);
 }
 
@@ -184,6 +193,7 @@ export function giveItem(g: Game, p: PlayerState, id: number, inherit?: ItemInst
       g.emit({ t: 'loseItem', seat: p.seat, item: cur.no });
       p.items[i] = inst;
       g.emit({ t: 'getItem', seat: p.seat, item: id });
+      awaken(g, p);
       return true;
     }
   }
@@ -191,7 +201,21 @@ export function giveItem(g: Game, p: PlayerState, id: number, inherit?: ItemInst
   if (freeSlots(p) <= 0) return false;
   p.items.push(inst);
   g.emit({ t: 'getItem', seat: p.seat, item: id });
+  awaken(g, p);
   return true;
+}
+
+/** 勇者が勇者の剣と盾をそろえると、真の勇者の剣と盾に変化する */
+function awaken(g: Game, p: PlayerState): void {
+  if (!isBrave(p) || !has(p, ITEM.hero_sword) || !has(p, ITEM.hero_shield)) return;
+  for (const [from, to] of [[ITEM.hero_sword, ITEM.true_sword], [ITEM.hero_shield, ITEM.true_shield]]) {
+    const i = p.items.findIndex((it) => it.id === from);
+    g.emit({ t: 'loseItem', seat: p.seat, item: from });
+    p.items[i] = { id: to };
+    g.emit({ t: 'getItem', seat: p.seat, item: to });
+  }
+  g.emit({ t: 'fx', name: 'heal', seat: p.seat });
+  g.msg('勇者の剣と盾が光り輝き、真の勇者の剣と盾になった！', p.seat);
 }
 
 /** ダメージ処理。HP0ならエリクサー→復活地点の順 */
@@ -209,6 +233,11 @@ export function hurt(g: Game, p: PlayerState, n: number): 'alive' | 'revived' | 
   g.emit({ t: 'death', seat: p.seat });
   g.msg(`${p.name}は倒れた…`, p.seat);
   respawn(g, p);
+  if (isBrave(p)) {
+    // 勇者は倒れるたびに吸収玉かさいころを1つ手に入れる
+    const id = g.rand.int(2) === 0 ? ITEM.absorb : ITEM.dice;
+    if (giveItem(g, p, id)) g.msg(`${p.name}は${ITEMS[id].name}を手に入れた`, p.seat);
+  }
   return 'dead';
 }
 
@@ -529,10 +558,10 @@ function* qbox(g: Game, p: PlayerState): Flow {
   const ids: number[] = [ITEM.piyo, ITEM.absorb, ITEM.curse];
   if (g.ext) ids.push(ITEM.dummy_doll);
   const full = freeSlots(p) <= 0;
-  const opts: Option[] = ids.map((id) => ({ label: ITEMS[id].name, value: id, disabled: full }));
+  const opts: Option[] = ids.map((id) => ({ label: ITEMS[id].name, value: id, disabled: full || !canAcquire(p, id) }));
   opts.push({ label: 'キャンセル' });
   const sel = yield* select(g, p, 'qbox', '?ボックスだ！ ひとつ選べる', opts, ids.length);
-  if (sel < ids.length && !full) giveItem(g, p, ids[sel]);
+  if (sel < ids.length && !full && canAcquire(p, ids[sel])) giveItem(g, p, ids[sel]);
 }
 
 function explode(g: Game, p: PlayerState, idx: number): void {
@@ -618,7 +647,7 @@ function* battle(g: Game, p: PlayerState, idx: number): Flow {
           break;
         case ITEM.mag_heal:
           g.emit({ t: 'fx', name: 'heal', seat: p.seat });
-          heal(g, p, roll(g, p, 3, 'heal'));
+          heal(g, p, roll(g, p, 3, 'heal') + (isBrave(p) ? 1 : 0));
           p.cursed = false;
           break;
         case ITEM.dice:
@@ -734,7 +763,7 @@ function* useFieldItem(g: Game, p: PlayerState, slot: number): Flow {
       return;
     case ITEM.mag_heal:
       g.emit({ t: 'fx', name: 'heal', seat: p.seat });
-      heal(g, p, roll(g, p, 3, 'heal'));
+      heal(g, p, roll(g, p, 3, 'heal') + (isBrave(p) ? 1 : 0));
       if (p.cursed) g.msg('呪いが解けた！', p.seat);
       p.cursed = false;
       return;

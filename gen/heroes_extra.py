@@ -126,7 +126,28 @@ def overlord(ph):
     P.append(S('sph',top+V3(0,0.04,0),'#e53935',r=0.045,facet=(3,8),spec=0.9))
     return P
 
-NEW={'hero_hunter':hunter,'hero_chef':chef,'hero_clown':clown,'hero_overlord':overlord}
+def brave(ph):
+    """勇者：ツンツンの茶髪に金のサークレット、青い上着に赤いマント。右手に剣、左手に丸盾"""
+    P,h,hc,hr=body(ph,'#1e88e5','#5d4037','#6d4c41',mitten='#8d6e63',belt='#6d4c41')
+    P.append(mass(hc,hr,'#8d5a2b',window=(0.68,0.6,0.5),r=(1.07,1.0,1.06),bulge=True,bangs=((-0.4,0.48),(-0.12,0.58),(0.16,0.55),(0.42,0.46))))
+    for (x,y,z) in ((0,1,-0.2),(-0.5,0.8,-0.3),(0.5,0.8,-0.3),(0,0.6,-0.85)):
+        P.append(spike(hc+V3(x*0.8,y*0.8,z*0.8)*hr,(x,1.0,z),0.12,0.07,'#8d5a2b'))
+    P.append(S('tor',hc+V3(0,0.32,0.02)*hr,'#ffca28',R=rot('x',-0.12),r1=1.0*hr,r2=0.05*hr,facet=(3,14),spec=0.8))   # サークレット
+    P.append(S('oct',hc+V3(0,0.42,0.98)*hr,'#e53935',sz=0.03,sc=(1,1.2,0.5),spec=0.9))
+    eyes(P,hc,hr)
+    P.append(S('box',(0,0.3,-0.17),'#d32f2f',R=rot('x',0.1+0.04*math.sin(ph)),b=(0.18,0.22,0.015),rr=0.015,facet=(3,8)))   # マント
+    P.append(S('tor',(0,0.53,-0.01),'#d32f2f',r1=0.12,r2=0.03,facet=(4,10)))
+    # 剣（右手）
+    st=h[1]; P.append(S('box',st+V3(0,0.0,0.05),'#ffca28',b=(0.06,0.012,0.012),rr=0.005,spec=0.8))
+    R,L=look(st+V3(0,0.0,0.05),st+V3(0,0.3,0.12))
+    P.append(S('box',st+V3(0,0.15,0.09),'#e3f2fd',R=R,b=(0.02,0.15,0.006),rr=0.004,spec=0.95))
+    # 丸盾（左手）
+    sh=h[0]+V3(-0.02,0.05,0.06)
+    P.append(S('ell',sh,'#1565c0',R=rot('y',-1.2),r=(0.1,0.1,0.018),facet=(3,12),spec=0.6))
+    P.append(S('sph',sh+V3(-0.02,0,0.01),'#ffca28',r=0.03,facet=(2,8),spec=0.9))
+    return P
+
+NEW={'hero_hunter':hunter,'hero_chef':chef,'hero_clown':clown,'hero_overlord':overlord,'hero_brave':brave}
 if __name__=='__main__':
     out=sys.argv[1]; only=set(sys.argv[2:])
     for k,f in NEW.items():

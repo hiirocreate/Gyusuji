@@ -38,15 +38,17 @@ def txt(d, at, string, fill, font=None, stroke_width=0, stroke_fill=WHITE):
 def finish(im):
     return im.resize((F, F), Image.Resampling.LANCZOS)
 
-def draw_die(top=5, left=2, right=3, gold=False, tilt=0):
+def draw_die(top=5, left=2, right=3, gold=False, tilt=0, chaos=False):
     im=frame(); d=ImageDraw.Draw(im); c='#f8f3e7' if not gold else '#ffd45a'
     # Simple, clean three-face cube; matched dark outline and one vivid red pip.
     a=(48,10); b=(82,29); m=(48,49); q=(14,29); l=(14,68); z=(48,88); r=(82,68)
-    poly(d,[a,b,m,q], '#fffdf6' if not gold else '#fff1ae', INK, 3)
-    poly(d,[q,m,z,l], '#d7deea' if not gold else '#e7a83a', INK, 3)
-    poly(d,[b,r,z,m], '#aebbd0' if not gold else '#d48628', INK, 3)
+    tops=('#c792ff','#8a4fd8','#6a35b0') if chaos else ('#fffdf6','#d7deea','#aebbd0') if not gold else ('#fff1ae','#e7a83a','#d48628')
+    poly(d,[a,b,m,q], tops[0], INK, 3)
+    poly(d,[q,m,z,l], tops[1], INK, 3)
+    poly(d,[b,r,z,m], tops[2], INK, 3)
+    rainbow=iter(['#ff5a6a','#ffd54f','#5ee07a','#56b6ff','#fffdf6','#ff9de2']*3)
     def pip(x,y,red=False):
-        color='#d63e45' if red else '#28334a'
+        color=next(rainbow) if chaos else '#d63e45' if red else '#28334a'
         # Larger, clearly separated round pips like a real ivory tabletop die.
         ell(d,(x-4.6,y-4.6,x+4.6,y+4.6),color,None)
         ell(d,(x-2.5,y-3.0,x-.5,y-1.0), '#fff5df' if red else '#aeb8c8', None)
@@ -130,10 +132,27 @@ def build_items():
     txt(d,(65,58),'?','#ffe86b',stroke_width=1,stroke_fill=INK); poly(d,[(80,8),(83,15),(90,17),(83,20),(80,27),(77,20),(70,17),(77,15)],'#fff3a0',INK,1); out.append(im)
     # 30. Demon horn: curled dark horn with a gold band and a red gem.
     im=frame();d=ImageDraw.Draw(im); poly(d,[(24,74),(34,48),(46,30),(62,18),(76,20),(70,28),(58,34),(50,48),(44,66),(40,78)],'#5d4037',INK,4); line(d,[(36,52),(46,34),(60,24)],'#8d6e63',3); poly(d,[(28,62),(46,68),(43,76),(25,70)],'#ffca28',INK,2); ell(d,(32,63,40,71),'#e53935',WHITE,1); out.append(im)
-    assert len(out)==30, len(out)
+    # 31-32. True hero sword / shield: hero gear recoloured in radiant gold with a rainbow gem and sparkle.
+    im=frame();d=ImageDraw.Draw(im); poly(d,[(48,10),(62,43),(52,48),(48,44),(44,48),(34,43)],'#fff3a0',INK,3); line(d,[(48,15),(53,41)],'#fff',2); line(d,[(32,48),(64,48)],'#ffca28',6); rr(d,(44,49,52,69),4,'#3949ab',INK,3); ell(d,(43,67,53,77),'#ffca28',INK,2); ell(d,(44,50,52,58),'#7cf3ff',WHITE,2); poly(d,[(74,10),(77,17),(84,19),(77,22),(74,29),(71,22),(64,19),(71,17)],'#fff3a0',INK,1); out.append(im)
+    im=frame();d=ImageDraw.Draw(im); poly(d,[(25,23),(71,23),(68,55),(48,76),(28,55)],'#ffd54f',INK,4); poly(d,[(32,30),(64,30),(61,53),(48,66),(35,53)],'#3949ab',WHITE,2); poly(d,[(37,34),(59,34),(57,51),(48,60),(39,51)],'#ffd54f',INK,1); ell(d,(42,38,54,52),'#7cf3ff',WHITE,2); poly(d,[(76,12),(79,19),(86,21),(79,24),(76,31),(73,24),(66,21),(73,19)],'#fff3a0',INK,1); out.append(im)
+    assert len(out)==32, len(out)
     atlas=Image.new('RGBA',(F*len(out),F),(0,0,0,0))
     for i,im in enumerate(out): atlas.alpha_composite(finish(im),(i*F,0))
     atlas.save(OUT/'items/icons-hd.png', optimize=True)
+
+def build_chaos_dice():
+    """狂乱のサイコロ用：紫の面に虹色の目（出目6面＋転がり8コマ）"""
+    side_faces={1:(2,3),2:(6,3),3:(2,6),4:(6,5),5:(4,2),6:(3,2)}
+    faces=Image.new('RGBA',(F*6,F),(0,0,0,0))
+    for i,n in enumerate([1,2,3,4,5,6]): faces.alpha_composite(finish(draw_die(n,*side_faces[n],chaos=True)),(F*i,0))
+    faces.save(OUT/'dice/chaos-hd.png', optimize=True)
+    seq=[draw_die(1,2,3,chaos=True),draw_die(2,6,3,chaos=True),draw_die(5,4,2,chaos=True),draw_die(3,4,6,chaos=True),draw_die(6,1,2,chaos=True),draw_die(4,5,3,chaos=True),draw_die(2,1,5,chaos=True),draw_die(5,2,4,chaos=True)]
+    roll=Image.new('RGBA',(F*len(seq),F),(0,0,0,0))
+    for i,im in enumerate(seq):
+        rot=im.rotate(45*(i+1), Image.Resampling.BICUBIC, expand=False)
+        rot=rot.resize((F, round(F*(0.88+0.12*abs(math.sin(i*math.pi/4)))),),Image.Resampling.LANCZOS)
+        roll.alpha_composite(rot,(F*i,(F-rot.height)//2))
+    roll.save(OUT/'dice/chaos-roll-hd.png', optimize=True)
 
 def build_dice():
     faces=Image.new('RGBA',(F*6,F),(0,0,0,0))
@@ -203,14 +222,16 @@ def brighten_heroes():
 
 def main():
     (OUT/'brand').mkdir(exist_ok=True)
-    build_items(); build_dice(); object_keys=build_objects(); brighten_heroes()
+    build_items(); build_dice(); build_chaos_dice(); object_keys=build_objects(); brighten_heroes()
     idx_path=OUT/'assets_index.json'
     idx=json.loads(idx_path.read_text())
     additions={
-      'items/icons-hd': {'frame':[96,96],'frames':30,'note':'High-resolution clear-silhouette icon atlas; order matches item numbers 1–30'},
+      'items/icons-hd': {'frame':[96,96],'frames':32,'note':'High-resolution clear-silhouette icon atlas; order matches item numbers 1–32'},
       'dice/faces-hd': {'frame':[96,96],'frames':6,'note':'High-resolution simplified one-to-six dice'},
       'dice/roll-hd': {'frame':[96,96],'frames':8,'note':'High-resolution tumbling dice frames'},
       'dice/ichi-hd': {'frame':[96,96],'frames':1,'note':'High-resolution special guaranteed-one gold die'},
+      'dice/chaos-hd': {'frame':[96,96],'frames':6,'note':'Chaos die faces (violet, rainbow pips)'},
+      'dice/chaos-roll-hd': {'frame':[96,96],'frames':8,'note':'Chaos die tumbling frames'},
       'brand/beef-rune': {'frame':[512,512],'frames':1,'note':'Transparent game-title beef emblem'},
     }
     for k in object_keys: additions[f'obj/{k}']={'frame':[96,96],'frames':1}
