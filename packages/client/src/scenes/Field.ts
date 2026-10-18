@@ -46,6 +46,8 @@ export class Field extends Phaser.Scene {
   private cursor!: Phaser.GameObjects.Sprite;
   private queue: Batch[] = [];
   private busy = false;
+  /** 最後に入力を送った時刻（応答待ちの判定用） */
+  private sentAt = 0;
   private battle!: Battle;
   private overlay!: Overlay;
   private status!: Status;
@@ -304,6 +306,10 @@ export class Field extends Phaser.Scene {
     const ask = this.host.ask;
     if (!ask || !this.host.mySeats.has(ask.seat)) return;
     if (fieldUI().querySelector('.askwin, .turnpop')) return;
+    // 入力を送った直後は応答を少し待つ（通信中にウィンドウを出し直さない）
+    if (Date.now() - this.sentAt < 2500) return;
+    // 送ったのに応答が無い：オンラインで切断中なら復帰を試みる
+    if (this.host.kind === 'online' && !net.room) void net.resume();
     this.refreshAsk(true);
   }
 
@@ -333,12 +339,18 @@ export class Field extends Phaser.Scene {
     }
     closeLog(); // 手番が来たらログは自動で閉じる
     const send = (inp: Parameters<Host['send']>[0]) => {
-      se('select');
+      try { se('select'); } catch { /* 音が鳴らせなくても入力は送る */ }
       this.pendingOptionIndex = null;
       this.pendingItemSlot = null;
       this.clearWins();
       this.showDesc(null);
-      this.host.send(inp);
+      this.sentAt = Date.now();
+      try {
+        this.host.send(inp);
+      } catch (err) {
+        console.error(err);
+        this.refreshAsk(true); // 送れなかったらウィンドウを出し直す
+      }
     };
     const p = this.view.players[ask.seat];
     if (ask.kind === 'action') {
@@ -431,12 +443,13 @@ export class Field extends Phaser.Scene {
     this.shownAsk = '';
     while (this.queue.length) {
       const b = this.queue.shift()!;
+      this.sentAt = 0; // 応答が来た
       for (const e of b.events) {
         try {
           // 演出が何らかの理由で終わらなくても（アプリの一時停止等）操作不能にならないよう上限を設ける。
           // 手番ポップアップはプレイヤーの操作待ちなので除く。
           const run = this.play(e, b.view);
-          await (e.t === 'turn' ? run : Promise.race([run, new Promise<void>((r) => setTimeout(r, 15000))]));
+          await (e.t === 'turn' ? run : Promise.race([run, new Promise<void>((r) => setTimeout(r, 6000))]));
         } catch (err) {
           console.error(err);
         }

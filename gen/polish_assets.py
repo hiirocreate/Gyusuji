@@ -68,6 +68,15 @@ def draw_die(top=5, left=2, right=3, gold=False, tilt=0, chaos=False):
     line(d,[(20,28),(48,12),(76,28)], '#ffffff' if not gold else '#fff9ce', 1)
     return im
 
+def orb(d, base, light, dark):
+    """台座つきのガラス玉：下に金の台座、玉は下半分を濃く、左上に白いハイライト"""
+    poly(d,[(30,70),(66,70),(72,80),(24,80)],'#e0a838',INK,3); line(d,[(28,75),(68,75)],'#ffd76a',2)
+    ell(d,(18,12,78,72),base,INK,4)
+    ell(d,(24,40,72,70),dark,None)
+    ell(d,(22,14,74,62),base,None)
+    ell(d,(30,20,66,52),light,None)
+    ell(d,(28,18,44,32),'#ffffff',None); ell(d,(46,20,51,25),'#ffffff',None)
+
 def build_items():
     out=[]
     # 1. Apple, with recognisable twin lobes, stem and leaf.
@@ -97,18 +106,33 @@ def build_items():
     for cover,symbol in [('#40a968','✚'),('#ef5254','▲'),('#f2aa35','★'),('#8559c8','✦')]:
         im=frame();d=ImageDraw.Draw(im); poly(d,[(25,28),(48,34),(70,26),(70,65),(48,72),(25,65)],cover,INK,4); line(d,[(48,34),(48,72)],'#ffe9aa',2); poly(d,[(30,34),(46,38),(46,65),(30,60)],'#fff2d3','#755e66',1); poly(d,[(50,38),(65,33),(65,60),(50,65)],'#ffe8b9','#755e66',1); ell(d,(39,40,58,59),'#fff8df','#b56c45',2); txt(d,(48,50),symbol,cover)
         out.append(im)
-    # 18. Sword sigil attack orb; 19. rainbow burst orb.
-    for col,mark in [('#ef535e','⚔'),('#66dcf3','✦')]:
-        im=frame();d=ImageDraw.Draw(im); ell(d,(22,20,74,72),col,INK,4); ell(d,(29,26,48,45),'#ffffff70',None); ell(d,(34,30,63,60),'#fff4d8',WHITE,2); txt(d,(50,44),mark,'#c33c56');
-        if col=='#66dcf3':
-            for a,c in enumerate(['#f45a65','#ffc647','#70cd74','#568fee','#9f67dc']):
-                angle=a*2*math.pi/5; ell(d,(48+math.cos(angle)*20-3,46+math.sin(angle)*18-3,48+math.cos(angle)*20+3,46+math.sin(angle)*18+3),c,None)
-        out.append(im)
+    # 18. Sword orb: ruby glass ball holding a clear silver sword.
+    im=frame();d=ImageDraw.Draw(im); orb(d,'#e2404f','#f46b76','#a81f35')
+    poly(d,[(48,22),(55,40),(48,52),(41,40)],'#eef4ff',INK,2); line(d,[(48,25),(50,40)],'#ffffff',1); line(d,[(38,52),(58,52)],'#ffcf56',4); rr(d,(45,52,51,62),2,'#7a4a2e',INK,2); out.append(im)
+    # 19. Parupun orb: rainbow-swirl glass ball with a big question mark and stars.
+    im=frame();d=ImageDraw.Draw(im); orb(d,'#7c5ce6','#a58cff','#4b33a8')
+    for k,c in enumerate(['#ff5a6a','#ffb347','#ffe066','#5ee07a','#56b6ff']):
+        d.arc(xy((26+k*3,20+k*3))+xy((70-k*3,64-k*3)),200+k*25,330+k*25,fill=c,width=3*S)
+    from PIL import ImageFont
+    txt(d,(48,41),'?','#fff7c2',font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 26*S),stroke_width=2,stroke_fill=INK)
+    for (x,y) in ((30,30),(64,52)): poly(d,[(x,y-5),(x+1.6,y-1.6),(x+5,y),(x+1.6,y+1.6),(x,y+5),(x-1.6,y+1.6),(x-5,y),(x-1.6,y-1.6)],'#fff3a0',None)
+    out.append(im)
     # 20. Yellow chick with recognizable beak, wing, eye and feet.
     im=frame();d=ImageDraw.Draw(im); ell(d,(30,38,67,73),'#ffd956',INK,4); ell(d,(41,17,68,47),'#ffdf63',INK,4); ell(d,(55,27,60,33),INK,None); poly(d,[(65,34),(78,39),(65,43)],'#f5833d',INK,2); ell(d,(30,46,48,62),'#fff1a5','#d39d3b',2); line(d,[(40,70),(37,77)],'#f1843f',3); line(d,[(56,70),(59,77)],'#f1843f',3); out.append(im)
-    # 21. Absorb vortex orb; 22. purple curse orb.
-    for col,mark in [('#34ccdd','↗'),('#8c59d6','!')]:
-        im=frame();d=ImageDraw.Draw(im); ell(d,(24,22,72,70),col,INK,4); ell(d,(32,29,50,47),'#ffffffbb',None); ell(d,(39,37,61,59),'#fff7d8',WHITE,2); txt(d,(50,48),mark,'#65509c'); out.append(im)
+    # 21. Absorb orb: teal glass ball with an inward vortex and arrows pulling to the centre.
+    im=frame();d=ImageDraw.Draw(im); orb(d,'#1fb8c9','#5fe0ea','#0e7c8f')
+    for k in range(3): d.arc(xy((30+k*6,24+k*6))+xy((66-k*6,60-k*6)),40+k*70,300+k*70,fill='#e8ffff',width=3*S)
+    ell(d,(45,39,51,45),'#0b5563',None)
+    for sx in (-1,1):
+        x=48+sx*22; poly(d,[(x,34),(x-sx*8,42),(x,50),(x+sx*2,42)],'#ffe066',INK,2)
+    out.append(im)
+    # 22. Curse orb: dark violet glass ball with a pale skull and wisps.
+    im=frame();d=ImageDraw.Draw(im); orb(d,'#7a3fc4','#9c66e0','#3d1a73')
+    ell(d,(36,26,60,48),'#f1e9ff',INK,2); rr(d,(41,44,55,52),2,'#f1e9ff',INK,2)
+    ell(d,(40,33,46,39),'#3d1a73',None); ell(d,(50,33,56,39),'#3d1a73',None); poly(d,[(48,40),(46,44),(50,44)],'#3d1a73',None)
+    for x in (44,48,52): line(d,[(x,46),(x,51)],'#3d1a73',1)
+    for (x,y) in ((28,24),(68,30),(30,58)): d.arc(xy((x-5,y-5))+xy((x+5,y+5)),180,360,fill='#d8c2ff',width=2*S)
+    out.append(im)
     # 23. Dragon mail chestplate with scale rows.
     im=frame();d=ImageDraw.Draw(im); poly(d,[(27,28),(40,22),(48,31),(56,22),(69,28),(66,54),(58,65),(38,65),(30,55)],'#3f9b65',INK,4); poly(d,[(27,29),(40,22),(48,31),(56,22),(69,29),(63,38),(33,38)],'#68c87d','#e8efce',2)
     for yy in [42,51]:
