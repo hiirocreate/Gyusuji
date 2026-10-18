@@ -14,10 +14,13 @@ export interface CharDef {
   unlock?: string;
 }
 
+/** 管理者コードで端末へ保存するキャラクター解放キー */
+export const characterCodeUnlockKey = (key: string): string => `admin-code:${key}`;
+
 /** 解放済み実績（id の一覧）でそのキャラを使えるか */
 export function charUnlocked(id: number, unlocks: readonly string[]): boolean {
   const c = CHARS[id];
-  return !!c && (!c.unlock || unlocks.includes(c.unlock));
+  return !!c && (!c.unlock || unlocks.includes(c.unlock) || unlocks.includes(characterCodeUnlockKey(c.key)));
 }
 
 /** 最初から使えるキャラの数（id 0〜） */

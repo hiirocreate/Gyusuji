@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import { BASE_CHAR_COUNT, C, CHARS, DEFAULT_SETTINGS, MAP_NAMES, charUnlocked } from '@gyusuji/shared';
+import { BASE_CHAR_COUNT, C, CHARS, DEFAULT_SETTINGS, MAP_NAMES, charUnlocked, characterCodeUnlockKey } from '@gyusuji/shared';
 import type { SeatInit, Settings } from '@gyusuji/shared';
 import { ACHIEVEMENTS } from '../achievements.js';
 import { bgm, se } from '../audio.js';
 import { buildChatBar, say, setSender } from '../chat.js';
 import { settingsForm } from '../forms.js';
-import { LocalHost, ReplayHost, net, type ReplayData } from '../net.js';
+import { LocalHost, ReplayHost, httpBase, net, type ReplayData } from '../net.js';
 import { store, update } from '../store.js';
 import { $, h, menuWin, screenEl, type MenuItem } from '../ui.js';
 import { HEROES } from '../assets.js';
@@ -26,6 +26,7 @@ export class Menu extends Phaser.Scene {
   private offs: (() => void)[] = [];
   private bg!: TitleBackdrop;
   private pressed = false;
+  private bossKillTapCount = 0;
 
   constructor() {
     super('Menu');
@@ -260,10 +261,122 @@ export class Menu extends Phaser.Scene {
   }
 
   private records() {
+    this.bossKillTapCount = 0;
     const st = store().stats;
-    this.show(h('div', {}, `対戦数 ${st.games}　優勝数 ${st.wins}　ラスボス撃破 ${st.lastBossKills}`),
+    const bossKills = h('button', {
+      type: 'button',
+      class: 'boss-kills-trigger',
+      'aria-label': `ラスボス撃破 ${st.lastBossKills}`,
+      onclick: () => {
+        this.bossKillTapCount += 1;
+        if (this.bossKillTapCount === 5) {
+          this.bossKillTapCount = 0;
+          this.openAdminCodeDialog(bossKills);
+        }
+      },
+    }, `ラスボス撃破 ${st.lastBossKills}`);
+    this.show(h('div', { class: 'records-summary' }, `対戦数 ${st.games}　優勝数 ${st.wins}　`, bossKills),
       h('div', { class: 'win list achievement-list' }, ...ACHIEVEMENTS.filter((a) => !a.hidden || store().achievements[a.id]).map((a) => h('div', { class: 'it off', style: `color:${store().achievements[a.id] ? '#ffe650' : '#889'}` }, `${a.name}：${a.desc}`))),
       this.list([{ label: 'もどる', on: () => this.title() }]));
+  }
+
+  private openAdminCodeDialog(returnFocus: HTMLElement) {
+    const root = screenEl().querySelector('.menu-full');
+    if (!root || root.querySelector('.admin-code-dialog')) return;
+
+    let backdrop!: HTMLElement;
+    let dialog!: HTMLElement;
+    const close = () => {
+      document.removeEventListener('keydown', onKeydown);
+      backdrop.remove();
+      dialog.remove();
+      returnFocus.focus();
+    };
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled])')];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const input = h('input', {
+      class: 'admin-code-input',
+      type: 'text',
+      maxLength: 96,
+      autoComplete: 'off',
+      autoCapitalize: 'characters',
+      placeholder: 'コードを入力',
+      'aria-label': '管理コード',
+    });
+    const status = h('div', { class: 'admin-code-status', 'aria-live': 'polite' }, '管理者コードを入力してください。');
+    const submitButton = h('button', { class: 'result-action', type: 'submit' }, '解放');
+    const form = h('form', {
+      class: 'admin-code-form',
+      onsubmit: async (event: Event) => {
+        event.preventDefault();
+        const code = input.value.trim();
+        if (!code) {
+          status.textContent = 'コードを入力してください。';
+          input.focus();
+          return;
+        }
+        submitButton.disabled = true;
+        status.textContent = 'コードを確認しています…';
+        try {
+          const response = await fetch(`${httpBase()}/character-unlock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+          });
+          if (!response.ok) {
+            status.textContent = response.status === 404 ? 'コードが正しくありません。' : 'コードを確認できませんでした。';
+            return;
+          }
+          const payload = await response.json() as { characterId?: unknown };
+          const id = payload?.characterId;
+          const character = typeof id === 'number' && Number.isInteger(id) ? CHARS[id] : undefined;
+          if (!character?.unlock) {
+            status.textContent = 'このコードではキャラクターを解放できません。';
+            return;
+          }
+          const wasUnlocked = charUnlocked(character.id, Object.keys(store().achievements));
+          update((s) => { s.achievements[characterCodeUnlockKey(character.key)] = 1; });
+          status.textContent = wasUnlocked ? `${character.name}はすでに使用できます。` : `${character.name}を解放しました！`;
+          input.value = '';
+          se('select');
+        } catch {
+          status.textContent = 'サーバーに接続できません。ネットワークをご確認ください。';
+        } finally {
+          submitButton.disabled = false;
+          input.focus();
+        }
+      },
+    }, input, status, h('div', { class: 'admin-code-actions' },
+      submitButton,
+      h('button', { class: 'result-action admin-code-cancel', type: 'button', onclick: close }, '閉じる')));
+    dialog = h('div', { class: 'win admin-code-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'キャラクター解放コード' },
+      h('div', { class: 'admin-code-title' }, '管理者コード'),
+      h('div', { class: 'admin-code-note' }, 'コードを入力して、対応するキャラクターを解放します。'),
+      form);
+    backdrop = h('div', { class: 'admin-code-backdrop', 'aria-hidden': 'true', onclick: close });
+    root.append(backdrop, dialog);
+    document.addEventListener('keydown', onKeydown);
+    input.focus();
   }
 
   private loadReplay() {

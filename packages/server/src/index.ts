@@ -4,17 +4,26 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { GameRoom } from './GameRoom.js';
 import { friendRooms } from './registry.js';
 import { ROOM_SLOTS } from '@gyusuji/shared';
+import { handleCharacterUnlockRequest } from './characterUnlockRoute.js';
 
 const port = Number(process.env.PORT ?? 2567);
 
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   const url = new URL(req.url ?? '/', 'http://x');
   const json = (code: number, body: unknown) => {
     res.writeHead(code, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   };
   if (url.pathname === '/health') return json(200, { ok: true });
+  if (url.pathname === '/character-unlock') return handleCharacterUnlockRequest(req, res);
   // ルームコード → roomId
   if (url.pathname === '/find') {
     const code = (url.searchParams.get('code') ?? '').toUpperCase();
