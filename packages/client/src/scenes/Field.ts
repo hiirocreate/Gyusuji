@@ -24,6 +24,17 @@ const HERO_SCALE = 0.72;
 type Batch = { events: GameEvent[]; view: PublicView };
 const ARROWS = ['up', 'down', 'left', 'right'];
 
+/** 2秒ごとと、アプリが前面に戻った時に呼ぶ */
+function watchAsk(f: () => void): () => void {
+  const onVis = () => document.visibilityState === 'visible' && f();
+  const id = window.setInterval(f, 2000);
+  document.addEventListener('visibilitychange', onVis);
+  return () => {
+    window.clearInterval(id);
+    document.removeEventListener('visibilitychange', onVis);
+  };
+}
+
 export class Field extends Phaser.Scene {
   private host!: Host;
   private map!: GameMap;
@@ -98,6 +109,7 @@ export class Field extends Phaser.Scene {
       host.kind === 'online' ? host.chat.on((m) => say({ from: m.from, text: m.text, color: m.color, system: !!m.system })) : () => {},
       host.kind === 'online' ? net.started.on((next) => this.scene.restart({ host: next })) : () => {},
       onLayout(() => this.time.delayedCall(0, () => { this.status?.draw(this.view, this.view.turn); this.lookAt(this.actor); this.positionDesc(); })),
+      watchAsk(() => this.ensureAsk()),
     ];
     this.events.once('shutdown', () => {
       window.removeEventListener('game-exit', exitGame);
@@ -286,6 +298,15 @@ export class Field extends Phaser.Scene {
     this.time.delayedCall(durationMs, () => el.remove());
   }
 
+  /** 自分の番なのに操作ウィンドウが無い状態（復帰直後など）を検出して出し直す */
+  private ensureAsk() {
+    if (!this.sys.isActive() || this.busy || this.queue.length || this.view?.over) return;
+    const ask = this.host.ask;
+    if (!ask || !this.host.mySeats.has(ask.seat)) return;
+    if (fieldUI().querySelector('.askwin, .turnpop')) return;
+    this.refreshAsk(true);
+  }
+
   private refreshAsk(force = false) {
     if (this.busy || this.queue.length) return;
     const ask = this.host.ask;
@@ -412,7 +433,10 @@ export class Field extends Phaser.Scene {
       const b = this.queue.shift()!;
       for (const e of b.events) {
         try {
-          await this.play(e, b.view);
+          // 演出が何らかの理由で終わらなくても（アプリの一時停止等）操作不能にならないよう上限を設ける。
+          // 手番ポップアップはプレイヤーの操作待ちなので除く。
+          const run = this.play(e, b.view);
+          await (e.t === 'turn' ? run : Promise.race([run, new Promise<void>((r) => setTimeout(r, 15000))]));
         } catch (err) {
           console.error(err);
         }
@@ -732,6 +756,12 @@ export class Field extends Phaser.Scene {
         }, h('span', { class: 'turn-play-icon' }, '▶'), ' 行動をはじめる')));
       el.classList.add('turnpop');
       fieldUI().append(el);
+      // 画面の作り直し等でポップアップが消えた場合は待ち続けない
+      const guard = window.setInterval(() => {
+        if (el.isConnected) return;
+        window.clearInterval(guard);
+        resolve();
+      }, 1000);
     });
   }
 
