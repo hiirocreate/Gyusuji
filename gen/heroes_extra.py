@@ -72,7 +72,34 @@ def chef(ph):
         P.append(S('oct',pc+V3(dx,0.04,dz),'#8d4a2b',sz=0.03,sc=(1.3,0.8,1)))
     return P
 
-NEW={'hero_hunter':hunter,'hero_chef':chef}
+def clown(ph):
+    """ピエロ：二股の道化帽（先に鈴）とひだ襟の道化師。紫と黄の衣装、赤い鼻、手にジョーカーの札"""
+    P,h,hc,hr=body(ph,'#7e57c2','#ffca28','#e53935',mitten='#fafafa',belt='#ffca28')
+    P.append(mass(hc,hr,'#43a047',cut=0.15,r=(1.08,0.9,1.0),bulge=False,bangs=((-0.5,0.3),(0.5,0.3))))          # 緑の髪（横にはねる）
+    for s_ in (-1,1): P.append(spike(hc+V3(0.8*s_,0.05,-0.1)*hr,(s_,0.25,0),0.16,0.07,'#43a047'))
+    # 道化帽：頭頂のキャップ＋左右に垂れる二股（紫・黄）、先に金の鈴
+    P.append(S('ell',hc+V3(0,0.45,-0.05)*hr,'#7e57c2',r=(1.02*hr,0.62*hr,1.0*hr),facet=(4,10),spec=0.2))
+    P.append(S('tor',hc+V3(0,0.28,-0.02)*hr,'#ffca28',r1=0.98*hr,r2=0.09*hr,facet=(3,12)))
+    for s_,col in ((-1,'#7e57c2'),(1,'#ffca28')):
+        a=hc+V3(0.45*s_,0.8,-0.05)*hr; b=hc+V3(1.25*s_,1.15,-0.05)*hr; c=hc+V3(1.55*s_,0.55,-0.05)*hr
+        R,L=look(a,b); P.append(S('cone',a,col,R=R,h=L,ra=0.38*hr,rb=0.16*hr,facet=(3,8),spec=0.2))
+        R,L=look(b,c); P.append(S('cone',b,col,R=R,h=L,ra=0.17*hr,rb=0.05*hr,facet=(3,8),spec=0.2))
+        P.append(S('sph',c,'#ffd54f',r=0.13*hr,facet=(3,8),spec=0.8))
+    eyes(P,hc,hr)
+    P.append(S('sph',hc+V3(0,-0.2,0.98)*hr,'#e53935',r=0.12*hr,facet=(3,8),spec=0.6))                         # 赤い鼻
+    P.append(S('oct',hc+V3(0.36,-0.42,0.86)*hr,'#1e88e5',sz=0.035,sc=(0.6,1.2,0.3)))                            # 涙のペイント
+    # ひだ襟
+    P.append(S('tor',(0,0.53,0.0),'#fafafa',r1=0.13,r2=0.04,facet=(4,12)))
+    for k in range(8):
+        a=2*math.pi*k/8; P.append(S('sph',(0.15*math.sin(a),0.53,0.15*math.cos(a)),'#fafafa',r=0.04,facet=(3,6)))
+    for y in (0.42,0.32): P.append(S('sph',(0.0,y,0.165),'#ffca28',r=0.02,facet=0,spec=0.6))                   # 黄色いポンポン
+    # ジョーカーの札（右手）
+    st=h[1]; cc=st+V3(0.02,0.1,0.06)
+    P.append(S('box',cc,'#fafafa',R=rot('z',-0.25),b=(0.06,0.085,0.006),rr=0.006))
+    P.append(S('oct',cc+V3(0,0,0.01),'#e53935',R=rot('z',-0.25),sz=0.03,sc=(1,1.3,0.3)))
+    return P
+
+NEW={'hero_hunter':hunter,'hero_chef':chef,'hero_clown':clown}
 if __name__=='__main__':
     out=sys.argv[1]; only=set(sys.argv[2:])
     for k,f in NEW.items():

@@ -1,6 +1,6 @@
 import { Room, type Client } from 'colyseus';
 import {
-  C, CHARS, CHAT_COLORS, CHAT_MAX, CLASSIC_PRESET, DEFAULT_SETTINGS, PROTOCOL_VERSION, Runner, STAMPS,
+  BASE_CHAR_COUNT, C, CHARS, CHAT_COLORS, charUnlocked, CHAT_MAX, CLASSIC_PRESET, DEFAULT_SETTINGS, PROTOCOL_VERSION, Runner, STAMPS,
 } from '@gyusuji/shared';
 import type { Ask, Input, SeatInit, Settings } from '@gyusuji/shared';
 import { RoomStateS, SeatS } from './schema.js';
@@ -17,6 +17,8 @@ interface JoinOptions {
   slot?: number;
   protocol?: number;
   platform?: string;
+  /** 端末に記録された解放済み実績（追加キャラの使用可否に使う） */
+  unlocks?: string[];
 }
 
 interface Member {
@@ -42,6 +44,8 @@ const rid = (n: number) => Array.from({ length: n }, () => '0123456789ABCDEFGHJK
 export class GameRoom extends Room<RoomStateS> {
   maxClients = 16;
   private members = new Map<string, Member>();
+  /** sessionId → 解放済み実績 */
+  private unlocks = new Map<string, string[]>();
   private tokens: string[] = ['', '', '', ''];
   private timeouts = [0, 0, 0, 0];
   private runner: Runner | null = null;
@@ -64,7 +68,9 @@ export class GameRoom extends Room<RoomStateS> {
     this.autoDispose = true;
 
     this.onMessage('setChar', (c, m: { id: number }) => this.lobbySeat(c, (s) => {
-      s.charId = clampInt(m?.id, 0, CHARS.length - 1);
+      const id = clampInt(m?.id, 0, CHARS.length - 1);
+      if (!charUnlocked(id, this.unlocks.get(c.sessionId) ?? [])) return; // 未解放キャラは受け付けない
+      s.charId = id;
       this.picked.add(this.members.get(c.sessionId)!.seat);
       this.checkStart();
     }));
@@ -75,7 +81,7 @@ export class GameRoom extends Room<RoomStateS> {
       if (!s || s.kind === 'human') return;
       s.kind = m.on ? 'cpu' : 'empty';
       s.name = m.on ? `CPU${clampInt(m.seat, 0, 3) + 1}` : '';
-      s.charId = m.on ? Math.floor(Math.random() * CHARS.length) : 0;
+      s.charId = m.on ? Math.floor(Math.random() * BASE_CHAR_COUNT) : 0;
       this.checkStart();
     }));
     this.onMessage('ready', (c, m: { on?: boolean }) => this.lobbySeat(c, (s) => {
@@ -131,6 +137,7 @@ export class GameRoom extends Room<RoomStateS> {
   }
 
   onJoin(client: Client, options: JoinOptions) {
+    this.unlocks.set(client.sessionId, Array.isArray(options?.unlocks) ? options.unlocks.filter((u) => typeof u === 'string').slice(0, 64) : []);
     const name = String(options?.name ?? 'ななし').slice(0, C.NAME_MAX) || 'ななし';
     // 再接続（トークン）
     const ti = options?.token ? this.tokens.indexOf(options.token) : -1;
@@ -169,7 +176,7 @@ export class GameRoom extends Room<RoomStateS> {
     s.connected = true;
     s.proxy = false;
     s.ready = false;
-    if (!midJoin) s.charId = seat % CHARS.length;
+    if (!midJoin) s.charId = seat % BASE_CHAR_COUNT;
     const token = rid(16);
     this.tokens[seat] = token;
     this.bindSeat(client, seat, token, options.friendCode, options.platform);
@@ -189,6 +196,7 @@ export class GameRoom extends Room<RoomStateS> {
   async onLeave(client: Client, consented: boolean) {
     const mem = this.members.get(client.sessionId);
     this.members.delete(client.sessionId);
+    this.unlocks.delete(client.sessionId);
     if (!mem) return;
     if (mem.friendCode) friendRooms.delete(mem.friendCode);
     if (mem.seat < 0) {

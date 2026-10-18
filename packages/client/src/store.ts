@@ -6,6 +6,10 @@ export interface Stats {
   wins: number;
   lastBossKills: number;
   casinoStreak: number;
+  /** キャラ id → 優勝回数 */
+  charWins: Record<number, number>;
+  /** 他のプレイヤーに向けたアイテム使用回数 */
+  meddles: number;
 }
 
 export interface Store {
@@ -29,7 +33,7 @@ const defaults = (): Store => ({
   serverUrl: defaultServer(),
   friendCode: String(Math.floor(10000000 + Math.random() * 89999999)),
   friends: [],
-  stats: { games: 0, wins: 0, lastBossKills: 0, casinoStreak: 0 },
+  stats: { games: 0, wins: 0, lastBossKills: 0, casinoStreak: 0, charWins: {}, meddles: 0 },
   achievements: {},
   tutorialDone: false,
   chatColor: 0,

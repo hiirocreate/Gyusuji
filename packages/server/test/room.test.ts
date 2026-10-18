@@ -25,6 +25,25 @@ describe('GameRoom', () => {
     await expect(c.create('game', { name: 'X', protocol: 1 })).rejects.toThrow(/更新/);
   });
 
+  it('追加キャラは実績を解放したプレイヤーだけが選べる', async () => {
+    const a = new Client(`ws://localhost:${PORT}`);
+    const b = new Client(`ws://localhost:${PORT}`);
+    const ra = await a.create<any>('game', { name: 'A', protocol: 3 });
+    const rb = await b.joinById<any>(ra.roomId, { name: 'B', protocol: 3, unlocks: ['all5', 'meanie'] });
+    for (const r of [ra, rb]) for (const t of ['seat', 'chat', 'start', 'sync', 'ev']) r.onMessage(t, () => {});
+    await new Promise((r) => setTimeout(r, 100));
+    ra.send('setChar', { id: 5 });
+    rb.send('setChar', { id: 7 });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(ra.state.seats[0].charId).not.toBe(5);
+    expect(rb.state.seats[1].charId).toBe(7);
+    ra.send('setChar', { id: 4 });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(ra.state.seats[0].charId).toBe(4);
+    await ra.leave();
+    await rb.leave();
+  });
+
   it('人間1人＋CPU3人で最後まで進み、kiwami が送られない', async () => {
     const client = new Client(`ws://localhost:${PORT}`);
     const room = await client.create<any>('game', { name: 'テスト', protocol: 3 });
