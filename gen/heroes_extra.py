@@ -102,7 +102,13 @@ def clown(ph):
 def overlord(ph):
     """元魔王：銀髪に大きな巻き角、赤い瞳。黒紫の外套と赤いマント、赤い宝玉の杖"""
     P,h,hc,hr=body(ph,'#4a148c','#212121','#311b92',mitten='#9e9e9e',stout=1.1,belt='#ffca28')
-    P.append(mass(hc,hr,'#e0e0e0',window=(0.68,0.6,0.5),r=(1.08,1.0,1.06),bulge=True,bangs=((-0.4,0.45),(-0.12,0.55),(0.16,0.52),(0.42,0.44))))
+    # 銀髪ロング：毛束のふくらみ無しのストレート、後ろ髪は腰まで、横髪は肩の前へ垂らす
+    hair='#d6dbe4'
+    P.append(mass(hc,hr,hair,window=(0.68,0.6,0.5),r=(1.07,1.0,1.06),bulge=False,bangs=((-0.38,0.45),(-0.12,0.52),(0.14,0.5),(0.38,0.44))))
+    P.append(S('ell',hc+V3(0,-0.95,-0.62)*hr,hair,op='blend',k=0.04,r=(0.85*hr,1.25*hr,0.32*hr),facet=(4,10),spec=0.3))
+    for s_ in (-1,1):
+        a=hc+V3(0.86*s_,-0.1,0.25)*hr; b=hc+V3(0.8*s_,-1.25,0.35)*hr
+        R,L=look(a,b); P.append(S('cone',a,hair,op='blend',k=0.03,R=R,h=L,ra=0.2*hr,rb=0.12*hr,facet=(3,8),spec=0.3))
     # 巻き角（根元は黒、先へ向かって外→上→内へ巻く）
     for s_ in (-1,1):
         pts=[hc+V3(0.55*s_,0.72,-0.05)*hr,hc+V3(0.95*s_,0.95,-0.1)*hr,hc+V3(1.2*s_,1.35,-0.12)*hr,hc+V3(1.05*s_,1.7,-0.1)*hr]
